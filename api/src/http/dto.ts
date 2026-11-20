@@ -66,6 +66,7 @@ export function toDetailDto(rows: ApplicationDetailRows, now: number): Applicati
       attempt: v.attempt,
       bank_version: v.bankVersion,
       superseded: v.superseded,
+      is_current: rows.currentVerificationIds.has(v.id),
       score: v.score,
       requested_at: iso(v.requestedAt),
       completed_at: isoOrNull(v.completedAt),
@@ -79,6 +80,17 @@ export function toDetailDto(rows: ApplicationDetailRows, now: number): Applicati
       resolution_note: t.resolutionNote === null ? null : redactText(t.resolutionNote),
       created_at: iso(t.createdAt),
       resolved_at: isoOrNull(t.resolvedAt),
+    })),
+    // Payloads are not exposed; only what the UI needs for late/duplicate markers.
+    callbacks: rows.callbacks.map((c) => ({
+      id: c.id,
+      event_id: c.eventId,
+      kind: c.kind,
+      request_id: c.requestId,
+      received_at: iso(c.receivedAt),
+      is_duplicate: c.isDuplicate,
+      processed: c.processed,
+      note: c.note,
     })),
     audit_log: rows.auditLog.map((a) => ({
       id: a.id,

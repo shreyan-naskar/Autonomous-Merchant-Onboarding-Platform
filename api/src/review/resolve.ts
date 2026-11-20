@@ -1,5 +1,6 @@
 import {
   REQUIRED_CHECKS,
+  REVIEW_RESOLUTION_FROM,
   redactText,
   type ApplicationStatus,
   type AuditEvent,
@@ -19,17 +20,17 @@ import { enqueueJob } from '../jobs/queue.js';
 import { currentVerification } from '../verification/latest.js';
 
 /**
- * Target, event and the states each resolution may be used from. Narrower
- * than ALLOWED_TRANSITIONS on purpose: IN_REVIEW -> APPROVED is legal, but
- * only APPROVE may take it (RETRY_MERCHANT_CREATION must not approve an
- * application under review, and APPROVE must not stand in for a retry).
+ * Target state and audit event per resolution. The states each one may be
+ * used from are REVIEW_RESOLUTION_FROM (shared): narrower than
+ * ALLOWED_TRANSITIONS, so RETRY_MERCHANT_CREATION cannot approve an
+ * application under review and APPROVE cannot stand in for a retry.
  */
-const TARGET: Record<ReviewResolution, { to: ApplicationStatus; event: AuditEvent; from: readonly ApplicationStatus[] }> = {
-  APPROVE: { to: 'APPROVED', event: 'OPERATOR_APPROVED', from: ['VERIFIED', 'IN_REVIEW'] },
-  REJECT: { to: 'REJECTED', event: 'OPERATOR_REJECTED', from: ['IN_REVIEW'] },
-  REQUEST_INFO: { to: 'NEEDS_INFO', event: 'OPERATOR_REQUESTED_INFO', from: ['IN_REVIEW'] },
-  RETRY_VERIFICATION: { to: 'VERIFYING', event: 'OPERATOR_REVERIFY', from: ['IN_REVIEW'] },
-  RETRY_MERCHANT_CREATION: { to: 'APPROVED', event: 'MERCHANT_CREATION_RETRY', from: ['MERCHANT_CREATION_FAILED'] },
+const TARGET: Record<ReviewResolution, { to: ApplicationStatus; event: AuditEvent }> = {
+  APPROVE: { to: 'APPROVED', event: 'OPERATOR_APPROVED' },
+  REJECT: { to: 'REJECTED', event: 'OPERATOR_REJECTED' },
+  REQUEST_INFO: { to: 'NEEDS_INFO', event: 'OPERATOR_REQUESTED_INFO' },
+  RETRY_VERIFICATION: { to: 'VERIFYING', event: 'OPERATOR_REVERIFY' },
+  RETRY_MERCHANT_CREATION: { to: 'APPROVED', event: 'MERCHANT_CREATION_RETRY' },
 };
 
 const notPossible = (resolution: ReviewResolution, status: ApplicationStatus, to: ApplicationStatus) =>
@@ -75,8 +76,8 @@ export function resolveReview(db: Db, config: Config, appId: string, req: Review
       }
 
       const note = redactText(req.note);
-      const { to, event, from } = TARGET[req.resolution];
-      if (!from.includes(app.status)) throw notPossible(req.resolution, app.status, to);
+      const { to, event } = TARGET[req.resolution];
+      if (!REVIEW_RESOLUTION_FROM[req.resolution].includes(app.status)) throw notPossible(req.resolution, app.status, to);
       const detail: Record<string, unknown> = { task_id: task.id, task_reason: task.reason, resolution: req.resolution, note };
 
       let kinds: VerificationKind[] | undefined;

@@ -190,6 +190,10 @@ describe('verification with the mock providers', () => {
     expect(events(d, 'ALL_CHECKS_PASSED')).toHaveLength(1);
     expect(d.verifications).toHaveLength(4);
     expect(db.select().from(jobs).all().filter((j) => j.type === 'approve')).toHaveLength(1);
+    // The detail DTO exposes the callbacks (no payloads) for the UI's duplicate markers.
+    expect(d.callbacks).toHaveLength(8);
+    expect(d.callbacks.filter((c) => c.is_duplicate).map((c) => c.note)).toEqual(Array(4).fill('duplicate ignored'));
+    expect(Object.keys(d.callbacks[0]!)).not.toContain('payload');
   });
 
   it('gst-fail.json: PAN passes, GST fails -> IN_REVIEW with PAN_OK_GST_FAILED', async () => {

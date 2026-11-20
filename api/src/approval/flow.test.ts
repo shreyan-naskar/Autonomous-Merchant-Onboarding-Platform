@@ -198,10 +198,11 @@ describe('Phase 5 end to end', () => {
     await drain(); // stale approve job is a no-op; BANK re-requested for version 2
     d = await detail(id);
     expect(d.status).toBe('VERIFYING');
-    expect(d.verifications.filter((v) => v.kind === 'BANK').map((v) => [v.bank_version, v.status, v.superseded])).toEqual([
-      [1, 'PASSED', true],
-      [2, 'PENDING', false],
+    expect(d.verifications.filter((v) => v.kind === 'BANK').map((v) => [v.bank_version, v.status, v.superseded, v.is_current])).toEqual([
+      [1, 'PASSED', true, false],
+      [2, 'PENDING', false, true],
     ]);
+    expect(d.verifications.filter((v) => v.is_current).map((v) => v.kind)).toEqual(['PAN', 'GST', 'RISK', 'BANK']);
     expect((await review(id, task.id, 'APPROVE')).status).toBe(409);
 
     expect(await deliver()).toBe(1);

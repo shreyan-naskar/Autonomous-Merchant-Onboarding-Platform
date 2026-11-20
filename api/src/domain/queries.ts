@@ -1,15 +1,17 @@
-import type { ApplicationStatus } from '@app/shared';
+import { REQUIRED_CHECKS, type ApplicationStatus } from '@app/shared';
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import {
   applications,
   auditLog,
+  callbackEvents,
   documents,
   extractedFields,
   reviewTasks,
   verifications,
   type Application,
 } from '../db/schema.js';
+import { currentVerification } from '../verification/latest.js';
 
 /** Raw rows (unmasked). Only http/dto.ts turns these into responses. */
 export type ApplicationListRow = Application & { openReviewCount: number };
@@ -20,6 +22,9 @@ export interface ApplicationDetailRows {
   extractedFields: (typeof extractedFields.$inferSelect)[];
   verifications: (typeof verifications.$inferSelect)[];
   reviewTasks: (typeof reviewTasks.$inferSelect)[];
+  callbacks: (typeof callbackEvents.$inferSelect)[];
+  /** Ids of the verification rows currentVerification() picks, one per kind at most. */
+  currentVerificationIds: Set<number>;
   auditLog: (typeof auditLog.$inferSelect)[];
 }
 
@@ -71,6 +76,15 @@ export function getApplicationDetail(db: Db, id: string): ApplicationDetailRows 
       .from(reviewTasks)
       .where(eq(reviewTasks.applicationId, id))
       .orderBy(asc(reviewTasks.id))
+      .all(),
+    currentVerificationIds: new Set(
+      REQUIRED_CHECKS.map((k) => currentVerification(db, row.app, k)?.id).filter((x): x is number => x !== undefined),
+    ),
+    callbacks: db
+      .select()
+      .from(callbackEvents)
+      .where(eq(callbackEvents.applicationId, id))
+      .orderBy(asc(callbackEvents.id))
       .all(),
     auditLog: db.select().from(auditLog).where(eq(auditLog.applicationId, id)).orderBy(asc(auditLog.id)).all(),
   };

@@ -71,6 +71,8 @@ export const VerificationDtoSchema = z.object({
   attempt: z.number().int(),
   bank_version: z.number().int(),
   superseded: z.boolean(),
+  /** The row that counts for this kind now (what evaluate() and the approval guard use). */
+  is_current: z.boolean(),
   score: z.number().nullable(),
   requested_at: iso,
   completed_at: iso.nullable(),
@@ -87,6 +89,20 @@ export const ReviewTaskDtoSchema = z.object({
   resolved_at: iso.nullable(),
 });
 
+/** Provider callbacks received for the application (duplicates included). No payload. */
+export const CallbackEventDtoSchema = z.object({
+  id: z.number().int(),
+  event_id: z.string(),
+  kind: z.string().nullable(),
+  request_id: z.string().nullable(),
+  received_at: iso,
+  is_duplicate: z.boolean(),
+  processed: z.boolean(),
+  /** Outcome: applied, late, stale, already_completed, mismatch, unknown_request, duplicate ignored. */
+  note: z.string().nullable(),
+});
+export type CallbackEventDto = z.infer<typeof CallbackEventDtoSchema>;
+
 export const AuditEntryDtoSchema = z.object({
   id: z.number().int(),
   at: iso,
@@ -102,6 +118,7 @@ export const ApplicationDetailDtoSchema = ApplicationSummaryDtoSchema.extend({
   extracted_fields: z.array(ExtractedFieldDtoSchema),
   verifications: z.array(VerificationDtoSchema),
   review_tasks: z.array(ReviewTaskDtoSchema),
+  callbacks: z.array(CallbackEventDtoSchema),
   audit_log: z.array(AuditEntryDtoSchema),
 });
 export type ApplicationDetailDto = z.infer<typeof ApplicationDetailDtoSchema>;

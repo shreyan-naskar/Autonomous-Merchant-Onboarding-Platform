@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ApplicationStatus } from './domain.js';
 
 /**
  * Operator resolutions for `POST /applications/:id/review`. Each maps to one
@@ -18,6 +19,19 @@ export const REVIEW_RESOLUTIONS = [
 ] as const;
 export const ReviewResolutionSchema = z.enum(REVIEW_RESOLUTIONS);
 export type ReviewResolution = z.infer<typeof ReviewResolutionSchema>;
+
+/**
+ * States each resolution may be used from. Narrower than ALLOWED_TRANSITIONS
+ * on purpose: IN_REVIEW -> APPROVED is legal, but only APPROVE may take it.
+ * The API enforces this; the UI uses it to decide which buttons to show.
+ */
+export const REVIEW_RESOLUTION_FROM: Record<ReviewResolution, readonly ApplicationStatus[]> = {
+  APPROVE: ['VERIFIED', 'IN_REVIEW'],
+  REJECT: ['IN_REVIEW'],
+  REQUEST_INFO: ['IN_REVIEW'],
+  RETRY_VERIFICATION: ['IN_REVIEW'],
+  RETRY_MERCHANT_CREATION: ['MERCHANT_CREATION_FAILED'],
+};
 
 export const REVIEW_NOTE_MIN = 5;
 
