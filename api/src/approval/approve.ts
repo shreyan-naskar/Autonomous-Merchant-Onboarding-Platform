@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Config } from '../config.js';
 import { applications, reviewTasks } from '../db/schema.js';
 import type { Tx } from '../domain/guards.js';
@@ -12,13 +12,16 @@ export function enqueueCreateMerchant(tx: Tx, appId: string, config: Config, now
   return enqueueJob(tx, 'create_merchant', { application_id: appId }, { now, maxAttempts: config.limits.merchantCreateMaxAttempts });
 }
 
-export type ApproveOutcome = 'approved' | 'high_risk' | 'skipped';
+export type ApproveOutcome = 'approved' | 'high_risk' | 'possible_duplicate' | 'skipped';
 
 /**
  * The `approve` job (enqueued when evaluate() reaches VERIFIED). Risk score
  * <= RISK_THRESHOLD: VERIFIED -> APPROVED (actor system, AUTO_APPROVED) and
  * create_merchant is enqueued. Otherwise VERIFIED -> IN_REVIEW with a
  * HIGH_RISK review task (a missing score is treated as high risk).
+ * An open POSSIBLE_DUPLICATE task also holds the app in IN_REVIEW (event
+ * POSSIBLE_DUPLICATE, no new task: the operator decides on the duplicate
+ * task, plus a HIGH_RISK task when the score is also too high).
  * Not in VERIFIED (already approved, bank changed, ...): no-op.
  */
 export function runApprove(deps: VerificationDeps, appId: string): ApproveOutcome {
@@ -30,7 +33,28 @@ export function runApprove(deps: VerificationDeps, appId: string): ApproveOutcom
       if (!app || app.status !== 'VERIFIED') return { outcome: 'skipped', status: app?.status };
 
       const score = currentVerification(tx, app, 'RISK')?.score ?? null;
-      if (score !== null && score <= threshold) {
+      const highRisk = score === null || score > threshold;
+      const duplicateTasks = tx
+        .select({ id: reviewTasks.id, related: reviewTasks.relatedApplicationId })
+        .from(reviewTasks)
+        .where(and(eq(reviewTasks.applicationId, appId), eq(reviewTasks.reason, 'POSSIBLE_DUPLICATE'), eq(reviewTasks.status, 'OPEN')))
+        .all();
+
+      if (!highRisk && duplicateTasks.length > 0) {
+        transition(tx, appId, 'IN_REVIEW', {
+          actor: 'system',
+          event: 'POSSIBLE_DUPLICATE',
+          detail: {
+            reason: 'POSSIBLE_DUPLICATE',
+            task_ids: duplicateTasks.map((t) => t.id),
+            related_application_ids: duplicateTasks.map((t) => t.related),
+            risk_score: score,
+          },
+          now,
+        });
+        return { outcome: 'possible_duplicate', score };
+      }
+      if (!highRisk) {
         transition(tx, appId, 'APPROVED', {
           actor: 'system',
           event: 'AUTO_APPROVED',
@@ -44,7 +68,12 @@ export function runApprove(deps: VerificationDeps, appId: string): ApproveOutcom
       transition(tx, appId, 'IN_REVIEW', {
         actor: 'system',
         event: 'HIGH_RISK',
-        detail: { reason: 'HIGH_RISK', risk_score: score, risk_threshold: threshold },
+        detail: {
+          reason: 'HIGH_RISK',
+          risk_score: score,
+          risk_threshold: threshold,
+          ...(duplicateTasks.length > 0 ? { open_duplicate_task_ids: duplicateTasks.map((t) => t.id) } : {}),
+        },
         now,
       });
       tx.insert(reviewTasks)

@@ -159,6 +159,8 @@ export const reviewTasks = sqliteTable(
     note: text(),
     // Operator's note when resolving (also in the audit detail).
     resolutionNote: text('resolution_note'),
+    // The other application a POSSIBLE_DUPLICATE task links to (not a FK: informational).
+    relatedApplicationId: text('related_application_id'),
     createdAt: integer('created_at').notNull(),
     resolvedAt: integer('resolved_at'),
   },

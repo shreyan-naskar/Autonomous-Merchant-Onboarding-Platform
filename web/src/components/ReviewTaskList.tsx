@@ -1,6 +1,19 @@
 import type { ApplicationDetailDto, ApplicationStatus } from '@app/shared'
+import { Link } from 'react-router'
 import { dateTime } from '../lib/format.ts'
 import { ReviewActions } from './ReviewActions.tsx'
+
+/** Link to the other application of a POSSIBLE_DUPLICATE task. */
+export function RelatedLink({ id }: { id: string }) {
+  return (
+    <p className="mt-1 text-sm">
+      Possible duplicate of{' '}
+      <Link to={`/applications/${id}`} className="font-mono text-xs text-blue-700 hover:underline">
+        {id}
+      </Link>
+    </p>
+  )
+}
 
 /** Review tasks of one application; open ones get the operator actions. */
 export function ReviewTaskList({
@@ -26,8 +39,9 @@ export function ReviewTaskList({
             <span className="text-xs text-slate-400">{dateTime(t.created_at)}</span>
           </div>
           {t.note && <p className="mt-1 text-sm text-slate-600">{t.note}</p>}
+          {t.related_application_id && <RelatedLink id={t.related_application_id} />}
           {t.resolution_note && <p className="mt-1 text-sm italic text-slate-600">Operator note: “{t.resolution_note}”</p>}
-          {t.status === 'OPEN' && <ReviewActions applicationId={applicationId} taskId={t.id} status={status} />}
+          {t.status === 'OPEN' && <ReviewActions applicationId={applicationId} taskId={t.id} taskReason={t.reason} status={status} />}
         </li>
       ))}
     </ul>

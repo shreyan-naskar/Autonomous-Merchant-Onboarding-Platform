@@ -1,10 +1,4 @@
-import {
-  REVIEW_NOTE_MIN,
-  REVIEW_RESOLUTIONS,
-  REVIEW_RESOLUTION_FROM,
-  type ApplicationStatus,
-  type ReviewResolution,
-} from '@app/shared'
+import { REVIEW_NOTE_MIN, resolutionsFor, type ApplicationStatus, type ReviewResolution } from '@app/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api } from '../lib/api.ts'
@@ -16,15 +10,26 @@ const LABEL: Record<ReviewResolution, string> = {
   REQUEST_INFO: 'Request info',
   RETRY_VERIFICATION: 'Retry verification',
   RETRY_MERCHANT_CREATION: 'Retry merchant creation',
+  DISMISS: 'Dismiss (not a duplicate)',
 }
 
 /**
  * Operator decision on one open task: a required note plus one button per
- * resolution the API accepts from the application's current state
- * (REVIEW_RESOLUTION_FROM, shared with the API). Errors, including the 409
+ * resolution the API accepts for this task in the application's current
+ * state (resolutionsFor, shared with the API). Errors, including the 409
  * approval-guard message, are shown inline.
  */
-export function ReviewActions({ applicationId, taskId, status }: { applicationId: string; taskId: number; status: ApplicationStatus }) {
+export function ReviewActions({
+  applicationId,
+  taskId,
+  taskReason,
+  status,
+}: {
+  applicationId: string
+  taskId: number
+  taskReason: string
+  status: ApplicationStatus
+}) {
   const qc = useQueryClient()
   const [note, setNote] = useState('')
   const resolve = useMutation({
@@ -35,7 +40,7 @@ export function ReviewActions({ applicationId, taskId, status }: { applicationId
       return qc.invalidateQueries()
     },
   })
-  const offered = REVIEW_RESOLUTIONS.filter((r) => REVIEW_RESOLUTION_FROM[r].includes(status))
+  const offered = resolutionsFor(status, taskReason)
   const noteOk = note.trim().length >= REVIEW_NOTE_MIN
 
   if (offered.length === 0) {

@@ -106,6 +106,7 @@ function toTaskDto(t: TaskRow) {
     resolution: t.resolution,
     note: t.note === null ? null : redactText(t.note),
     resolution_note: t.resolutionNote === null ? null : redactText(t.resolutionNote),
+    related_application_id: t.relatedApplicationId,
     created_at: iso(t.createdAt),
     resolved_at: isoOrNull(t.resolvedAt),
   };

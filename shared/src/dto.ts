@@ -85,6 +85,8 @@ export const ReviewTaskDtoSchema = z.object({
   resolution: z.string().nullable(),
   note: z.string().nullable(),
   resolution_note: z.string().nullable(),
+  /** The other application a POSSIBLE_DUPLICATE task points at. */
+  related_application_id: z.string().nullable(),
   created_at: iso,
   resolved_at: iso.nullable(),
 });

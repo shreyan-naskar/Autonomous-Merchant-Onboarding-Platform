@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ApplicationStatus } from './domain.js';
+import { APPLICATION_STATUSES, type ApplicationStatus } from './domain.js';
 
 /**
  * Operator resolutions for `POST /applications/:id/review`. Each maps to one
@@ -9,6 +9,10 @@ import type { ApplicationStatus } from './domain.js';
  * - REQUEST_INFO: IN_REVIEW -> NEEDS_INFO
  * - RETRY_VERIFICATION: IN_REVIEW -> VERIFYING (re-runs checks that have not passed; all four if every check passed)
  * - RETRY_MERCHANT_CREATION: MERCHANT_CREATION_FAILED -> APPROVED (re-enqueues create_merchant)
+ * - DISMISS: no transition; closes an informational task (POSSIBLE_DUPLICATE)
+ *   that turned out to be harmless. Any state except IN_REVIEW (there, one of
+ *   the decisions above resolves it, so the app is never left under review
+ *   with nothing to act on).
  */
 export const REVIEW_RESOLUTIONS = [
   'APPROVE',
@@ -16,6 +20,7 @@ export const REVIEW_RESOLUTIONS = [
   'REQUEST_INFO',
   'RETRY_VERIFICATION',
   'RETRY_MERCHANT_CREATION',
+  'DISMISS',
 ] as const;
 export const ReviewResolutionSchema = z.enum(REVIEW_RESOLUTIONS);
 export type ReviewResolution = z.infer<typeof ReviewResolutionSchema>;
@@ -31,7 +36,21 @@ export const REVIEW_RESOLUTION_FROM: Record<ReviewResolution, readonly Applicati
   REQUEST_INFO: ['IN_REVIEW'],
   RETRY_VERIFICATION: ['IN_REVIEW'],
   RETRY_MERCHANT_CREATION: ['MERCHANT_CREATION_FAILED'],
+  DISMISS: APPLICATION_STATUSES.filter((s) => s !== 'IN_REVIEW'),
 };
+
+/** Review task reasons that do not come with a state of their own; only these can be dismissed. */
+export const INFORMATIONAL_TASK_REASONS: readonly string[] = ['POSSIBLE_DUPLICATE'];
+
+/**
+ * Resolutions offered for one task: allowed from the application's state,
+ * and DISMISS only for informational tasks. The API enforces the same rule.
+ */
+export function resolutionsFor(status: ApplicationStatus, taskReason: string): ReviewResolution[] {
+  return REVIEW_RESOLUTIONS.filter(
+    (r) => REVIEW_RESOLUTION_FROM[r].includes(status) && (r !== 'DISMISS' || INFORMATIONAL_TASK_REASONS.includes(taskReason)),
+  );
+}
 
 export const REVIEW_NOTE_MIN = 5;
 

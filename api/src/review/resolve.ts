@@ -1,4 +1,5 @@
 import {
+  INFORMATIONAL_TASK_REASONS,
   REQUIRED_CHECKS,
   REVIEW_RESOLUTION_FROM,
   redactText,
@@ -12,7 +13,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { enqueueCreateMerchant } from '../approval/approve.js';
 import type { Config } from '../config.js';
 import type { Db } from '../db/client.js';
-import { applications, reviewTasks, verifications, type Application } from '../db/schema.js';
+import { applications, auditLog, reviewTasks, verifications, type Application } from '../db/schema.js';
 import type { Tx } from '../domain/guards.js';
 import { transition } from '../domain/transition.js';
 import { AppError, ConflictError, IllegalTransitionError, NotFoundError } from '../errors.js';
@@ -25,7 +26,7 @@ import { currentVerification } from '../verification/latest.js';
  * ALLOWED_TRANSITIONS, so RETRY_MERCHANT_CREATION cannot approve an
  * application under review and APPROVE cannot stand in for a retry.
  */
-const TARGET: Record<ReviewResolution, { to: ApplicationStatus; event: AuditEvent }> = {
+const TARGET: Record<Exclude<ReviewResolution, 'DISMISS'>, { to: ApplicationStatus; event: AuditEvent }> = {
   APPROVE: { to: 'APPROVED', event: 'OPERATOR_APPROVED' },
   REJECT: { to: 'REJECTED', event: 'OPERATOR_REJECTED' },
   REQUEST_INFO: { to: 'NEEDS_INFO', event: 'OPERATOR_REQUESTED_INFO' },
@@ -76,9 +77,30 @@ export function resolveReview(db: Db, config: Config, appId: string, req: Review
       }
 
       const note = redactText(req.note);
+      const detail: Record<string, unknown> = { task_id: task.id, task_reason: task.reason, resolution: req.resolution, note };
+      const closeTask = () =>
+        tx.update(reviewTasks)
+          .set({ status: 'RESOLVED', resolution: req.resolution, resolutionNote: note, resolvedAt: now })
+          .where(and(eq(reviewTasks.id, task.id), eq(reviewTasks.status, 'OPEN')))
+          .run();
+
+      if (req.resolution === 'DISMISS') {
+        if (!INFORMATIONAL_TASK_REASONS.includes(task.reason)) {
+          throw new AppError(`A ${task.reason} task cannot be dismissed; choose a decision`, 409, 'NOT_DISMISSIBLE', {
+            task_reason: task.reason,
+          });
+        }
+        if (!REVIEW_RESOLUTION_FROM.DISMISS.includes(app.status)) throw notPossible(req.resolution, app.status, app.status);
+        // No transition: an audit row (to_state null) and the task update.
+        tx.insert(auditLog)
+          .values({ applicationId: appId, at: now, actor: 'operator', fromState: app.status, toState: null, event: 'REVIEW_TASK_DISMISSED', detail })
+          .run();
+        closeTask();
+        return app;
+      }
+
       const { to, event } = TARGET[req.resolution];
       if (!REVIEW_RESOLUTION_FROM[req.resolution].includes(app.status)) throw notPossible(req.resolution, app.status, to);
-      const detail: Record<string, unknown> = { task_id: task.id, task_reason: task.reason, resolution: req.resolution, note };
 
       let kinds: VerificationKind[] | undefined;
       if (req.resolution === 'RETRY_VERIFICATION') {
@@ -101,10 +123,7 @@ export function resolveReview(db: Db, config: Config, appId: string, req: Review
       if (to === 'APPROVED') enqueueCreateMerchant(tx, appId, config, now);
       if (kinds) enqueueJob(tx, 'start_verifications', { application_id: appId, kinds }, { now });
 
-      tx.update(reviewTasks)
-        .set({ status: 'RESOLVED', resolution: req.resolution, resolutionNote: note, resolvedAt: now })
-        .where(and(eq(reviewTasks.id, task.id), eq(reviewTasks.status, 'OPEN')))
-        .run();
+      closeTask();
       return updated;
     },
     { behavior: 'immediate' },

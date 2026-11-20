@@ -5,6 +5,7 @@ import type { Db } from '../db/client.js';
 import { applications, auditLog, documents, reviewTasks, verifications, type Application } from '../db/schema.js';
 import { ConflictError, NotFoundError } from '../errors.js';
 import { enqueueJob } from '../jobs/queue.js';
+import { flagDuplicates } from './duplicates.js';
 import type { Tx } from './guards.js';
 import { transition } from './transition.js';
 
@@ -98,6 +99,8 @@ export function submitApplication(
           })
           .run();
       }
+      // Informational: never blocks submission (approve holds while it is open).
+      flagDuplicates(tx, app, now);
       enqueueJob(tx, 'extract', { application_id: id }, { now });
       return app;
     },
