@@ -15,8 +15,8 @@ from these two files alone.
 | 3. Worker + extraction | DONE | worker, validators, extract job, decision, NEEDS_INFO re-entry |
 | 4. Mock providers + callbacks | DONE | signed async callbacks, idempotent webhook, evaluate, timeouts/retries, late reconciliation |
 | 5. Approval, MID, bank change | DONE | approve job, review endpoint, create_merchant + MID service, bank change |
-| 6. UI | NEXT | |
-| 7. Stretch | todo | cut first if behind |
+| 6. UI | DONE | all six pages; demo script verified through the Vite proxy, not clicked in a browser |
+| 7. Stretch | NEXT | cut first if behind |
 | 8. Hardening, docs, demo | todo | |
 
 ## Standing decisions (resolved plan gaps — follow these)
@@ -247,6 +247,27 @@ These come from the kickoff prompt and override or refine PLAN.md:
 - Testkit additions: `seedVerification`, `verifiedApp(db, id, {riskScore})`.
   Phase 5 end-to-end: `api/src/approval/flow.test.ts` (its `drain()` only runs
   jobs due within 5s so the 30s verification timeouts never fire).
+- Web (Phase 6): `web/src` — `main.tsx` (QueryClient with `refetchInterval:
+  3000` default, BrowserRouter), `App.tsx` (nav + routes + MetricsStrip),
+  `lib/api.ts` (`api` -> `/api`, `mockApi` -> `/mock`; `ApiError` carries the
+  API's message so 409s show inline), `pages/` (ApplicationList,
+  ApplicationDetail, ReviewQueue, SubmitApplication, DemoPanel),
+  `components/`. Vite proxy in `web/vite.config.ts`: `/api` -> :3000 and
+  `/mock` -> :4000 with the prefix stripped (ports from `API_PORT` /
+  `MOCK_PROVIDERS_PORT`), so no CORS. `server.fs.allow: ['..']` lets
+  `import.meta.glob('../../../sample-data/*.json')` bundle the samples.
+  The UI holds no workflow state: which review buttons appear comes from
+  `REVIEW_RESOLUTION_FROM` (shared, also enforced by the API), the current
+  verification row from the API's `is_current`.
+- API additions for the UI (read-only): detail DTO `callbacks[]` (no
+  payloads) and `verifications[].is_current`; `GET /review-tasks?status=OPEN|RESOLVED`
+  (`listReviewTasks`, task + merchant name + app status, oldest first);
+  `GET /metrics` (`api/src/metrics/metrics.ts`: pure `computeMetrics` over
+  transition rows — avg of completed stays per state, `current` counts,
+  exception rate = apps that ever entered IN_REVIEW or NEEDS_INFO / total).
+- `web` ESLint is broken independently of this work (crashes inside
+  `@typescript-eslint` with TypeScript ~6 on HEAD before Phase 6); `tsc -b` is
+  the check that runs (`npm run typecheck`).
 - better-sqlite3 13.2 builds/loads on this Fedora machine with no extra system
   packages. npm 11 gates install scripts: `allowScripts` in root package.json
   approves better-sqlite3 and esbuild.
@@ -529,3 +550,69 @@ is not started for bank version 2...`, then 200 after the callback; with
 MERCHANT_CREATION_FAILED; flag off + RETRY_MERCHANT_CREATION ->
 MERCHANT_CREATED. No raw PAN/account in either log. `npm run typecheck` clean;
 status-writer grep shows only `transition.ts` writing `applications.status`.
+
+### Phase 6: Operator and merchant UI — DONE (2026-11-21)
+
+Done (commits 6.1-6.6, one per page):
+1. Application list: status badge (one color per state, typed against the
+   shared enum), merchant, time in state, open reviews, MID, status filter;
+   rows link to the detail.
+2. Detail: header with masked PAN/GSTIN/account and MID; vertical timeline
+   from audit_log (actor icon, from -> to, event, expandable masked detail);
+   extracted fields with confidence bar and validation chip; 4 verification
+   cards (status, attempt, bank version, risk score, late / duplicate ignored /
+   stale markers, attempt history); missing-info panel (latest INFO_REQUIRED
+   items, operator note, JSON documents PATCH) in NEEDS_INFO; review tasks
+   with actions; merchant bank-change form.
+3. Review queue: open tasks (reason, app link, status) with a required note
+   and only the resolutions the API accepts in that state; errors including
+   the 409 guard message are shown inline.
+4. Submit: form fields, JSON documents textarea, "load sample" dropdown
+   (all of sample-data/, bundled at build time), file upload per document
+   type (multipart; an uploaded file replaces the JSON doc of that type).
+5. Demo controls: switches for fail GST, duplicate callback, drop callback
+   (timeout), late callback (45s), fail merchant creation; callback delay;
+   reset all; current mock + merchant-service config shown.
+6. Metrics strip on every page: total, exception rate, avg time per state.
+   API tests for `computeMetrics` (3) and `GET /metrics` over HTTP (1);
+   `GET /review-tasks` test.
+
+Test results (`npm test`):
+```
+ Test Files  25 passed (25)
+      Tests  338 passed (338)
+```
+`npm run typecheck` (api, shared, mock-providers, web) clean; `vite build` clean.
+
+Verified (with `npm run dev`, scratch DB_PATH, everything through Vite on :5173):
+- `npm run dev` starts api :3000, mock :4000, web :5173; `/`, `/review`,
+  `/submit`, `/demo`, `/applications/:id` serve the SPA; every page module
+  and the five sample JSON modules compile/serve (200).
+- `/api/*` and `/mock/*` proxies reach both backends.
+- Demo script, via the same requests the pages make
+  (scratchpad `demo_check.py`): (1-3) happy.json with duplicate callbacks
+  on -> SUBMITTED > EXTRACTING > VERIFYING > VERIFIED > APPROVED >
+  MERCHANT_CREATED, MID shown, 8 callbacks / 4 duplicates, fields at
+  confidence 1 `ok`, PAN masked; (4) gst-fail.json -> IN_REVIEW
+  PAN_OK_GST_FAILED, short note -> 400 with "Note is required (at least 5
+  characters)", REJECT -> REJECTED, queue empty; (5) high-risk.json ->
+  IN_REVIEW HIGH_RISK, bank change -> bank_version 2, APPROVE -> 409 "Cannot
+  approve: BANK is not started for bank version 2...", APPROVE after BANK v2
+  passes -> APPROVED -> MERCHANT_CREATED; fail merchant creation ->
+  JOB_FAILED x2 -> MERCHANT_CREATION_FAILED -> RETRY_MERCHANT_CREATION ->
+  MERCHANT_CREATED; metrics: 4 apps, exception rate 0.5. No raw PAN/account in
+  any response. Multipart upload through the proxy stores the file.
+
+Not verified (needs a real browser; no browser tool in this session):
+- Rendering, layout and styling of each page; clicking through the UI;
+  3s polling visibly updating the timeline; the switches' toggled look;
+  inline error boxes appearing on 409/400; file picker behavior. The code
+  paths are typechecked and the API calls they make are verified above.
+
+Demo notes:
+- "Bank change on a verified application": happy apps auto-approve within a
+  second, so in the browser use high-risk.json (stays IN_REVIEW) or set the
+  callback delay to ~15000 ms in Demo controls first; then the 409 guard
+  message is visible on Approve until the BANK v2 callback lands.
+- Push from this session failed (no GitHub credentials in the shell); push
+  manually.
