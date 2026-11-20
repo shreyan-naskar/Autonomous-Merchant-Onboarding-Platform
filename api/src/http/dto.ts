@@ -6,10 +6,12 @@ import {
   redactText,
   type ApplicationDetailDto,
   type ApplicationSummaryDto,
+  type DeadJobDto,
   type DocumentType,
   type ReviewQueueItemDto,
 } from '@app/shared';
 import type { ApplicationDetailRows, ApplicationListRow, ReviewQueueRow } from '../domain/queries.js';
+import type { JobRow } from '../jobs/deadLetter.js';
 
 /*
  * The response-mapping layer. Every application-related response body is
@@ -114,4 +116,22 @@ function toTaskDto(t: TaskRow) {
 
 export function toReviewQueueItemDto(row: ReviewQueueRow): ReviewQueueItemDto {
   return { ...toTaskDto(row), application_id: row.applicationId, merchant_name: row.merchantName, application_status: row.applicationStatus };
+}
+
+/** Dead-letter row. The payload is masked (maskDeep) and the error redacted, like any other response. */
+export function toDeadJobDto(job: JobRow): DeadJobDto {
+  const appId = (job.payload as Record<string, unknown> | null)?.application_id;
+  return {
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    payload: maskDeep(job.payload),
+    application_id: typeof appId === 'string' ? appId : null,
+    attempts: job.attempts,
+    max_attempts: job.maxAttempts,
+    last_error: job.lastError === null ? null : redactText(job.lastError),
+    run_at: iso(job.runAt),
+    created_at: iso(job.createdAt),
+    updated_at: iso(job.updatedAt),
+  };
 }

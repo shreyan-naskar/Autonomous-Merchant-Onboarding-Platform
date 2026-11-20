@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   ActorSchema,
   ApplicationStatusSchema,
+  JobStatusSchema,
   ReviewTaskStatusSchema,
   ValidationStatusSchema,
   VerificationKindSchema,
@@ -154,3 +155,21 @@ export const MetricsDtoSchema = z.object({
   states: z.array(StateMetricDtoSchema),
 });
 export type MetricsDto = z.infer<typeof MetricsDtoSchema>;
+
+/** Dead-letter view row: a `dead` job. Payload masked like every other response. */
+export const DeadJobDtoSchema = z.object({
+  id: z.number().int(),
+  type: z.string(),
+  status: JobStatusSchema,
+  payload: z.unknown(),
+  application_id: z.string().nullable(),
+  attempts: z.number().int(),
+  max_attempts: z.number().int(),
+  last_error: z.string().nullable(),
+  run_at: iso,
+  created_at: iso,
+  updated_at: iso,
+});
+export type DeadJobDto = z.infer<typeof DeadJobDtoSchema>;
+export const DeadJobListDtoSchema = z.object({ items: z.array(DeadJobDtoSchema), count: z.number().int() });
+export type DeadJobListDto = z.infer<typeof DeadJobListDtoSchema>;

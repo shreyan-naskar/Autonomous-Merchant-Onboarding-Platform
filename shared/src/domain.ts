@@ -86,6 +86,7 @@ export const AUDIT_EVENTS = [
   'REVIEW_TASK_DISMISSED',
   'JOB_FAILED',
   'JOB_DEAD',
+  'JOB_REQUEUED',
 ] as const;
 export const AuditEventSchema = z.enum(AUDIT_EVENTS);
 export type AuditEvent = z.infer<typeof AuditEventSchema>;

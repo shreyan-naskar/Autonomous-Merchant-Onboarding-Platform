@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from 'react-router'
 import { MetricsStrip } from './components/MetricsStrip.tsx'
 import { ApplicationDetail } from './pages/ApplicationDetail.tsx'
 import { ApplicationList } from './pages/ApplicationList.tsx'
+import { DeadLetters } from './pages/DeadLetters.tsx'
 import { DemoPanel } from './pages/DemoPanel.tsx'
 import { ReviewQueue } from './pages/ReviewQueue.tsx'
 import { SubmitApplication } from './pages/SubmitApplication.tsx'
@@ -10,6 +11,7 @@ const NAV = [
   { to: '/', label: 'Applications' },
   { to: '/review', label: 'Review queue' },
   { to: '/submit', label: 'Submit' },
+  { to: '/dead-letters', label: 'Dead letters' },
   { to: '/demo', label: 'Demo controls' },
 ]
 
@@ -40,6 +42,7 @@ export default function App() {
           <Route path="/applications/:id" element={<ApplicationDetail />} />
           <Route path="/review" element={<ReviewQueue />} />
           <Route path="/submit" element={<SubmitApplication />} />
+          <Route path="/dead-letters" element={<DeadLetters />} />
           <Route path="/demo" element={<DemoPanel />} />
         </Routes>
       </main>

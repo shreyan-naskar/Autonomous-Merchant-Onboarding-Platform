@@ -3,16 +3,28 @@ import { Link } from 'react-router'
 import { dateTime } from '../lib/format.ts'
 import { ReviewActions } from './ReviewActions.tsx'
 
-/** Link to the other application of a POSSIBLE_DUPLICATE task. */
-export function RelatedLink({ id }: { id: string }) {
-  return (
-    <p className="mt-1 text-sm">
-      Possible duplicate of{' '}
-      <Link to={`/applications/${id}`} className="font-mono text-xs text-blue-700 hover:underline">
-        {id}
-      </Link>
-    </p>
-  )
+/** Where to act on a task outside the review buttons: the other application of a duplicate, or the dead-letter view. */
+export function TaskLinks({ task }: { task: { reason: string; status: string; related_application_id: string | null } }) {
+  if (task.related_application_id) {
+    return (
+      <p className="mt-1 text-sm">
+        Possible duplicate of{' '}
+        <Link to={`/applications/${task.related_application_id}`} className="font-mono text-xs text-blue-700 hover:underline">
+          {task.related_application_id}
+        </Link>
+      </p>
+    )
+  }
+  if (task.reason === 'JOB_DEAD' && task.status === 'OPEN') {
+    return (
+      <p className="mt-1 text-sm">
+        <Link to="/dead-letters" className="text-blue-700 hover:underline">
+          Requeue the job from the dead-letter view
+        </Link>
+      </p>
+    )
+  }
+  return null
 }
 
 /** Review tasks of one application; open ones get the operator actions. */
@@ -39,7 +51,7 @@ export function ReviewTaskList({
             <span className="text-xs text-slate-400">{dateTime(t.created_at)}</span>
           </div>
           {t.note && <p className="mt-1 text-sm text-slate-600">{t.note}</p>}
-          {t.related_application_id && <RelatedLink id={t.related_application_id} />}
+          <TaskLinks task={t} />
           {t.resolution_note && <p className="mt-1 text-sm italic text-slate-600">Operator note: “{t.resolution_note}”</p>}
           {t.status === 'OPEN' && <ReviewActions applicationId={applicationId} taskId={t.id} taskReason={t.reason} status={status} />}
         </li>

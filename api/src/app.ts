@@ -7,6 +7,7 @@ import { createSimulatedMerchantService, type SimulatedMerchantService } from '.
 import { errorHandler, notFoundHandler } from './http/errorHandler.js';
 import { adminRouter } from './http/routes/admin.js';
 import { applicationsRouter } from './http/routes/applications.js';
+import { jobsRouter } from './http/routes/jobs.js';
 import { reviewTasksRouter } from './http/routes/reviewTasks.js';
 import { webhooksRouter } from './http/routes/webhooks.js';
 
@@ -57,6 +58,7 @@ export function createApp(deps: AppDeps): Express {
   });
 
   app.use('/review-tasks', reviewTasksRouter({ db }));
+  app.use('/jobs', jobsRouter({ db, logger, now }));
   app.use('/admin', adminRouter({ merchantService, logger }));
 
   deps.mount?.(app);

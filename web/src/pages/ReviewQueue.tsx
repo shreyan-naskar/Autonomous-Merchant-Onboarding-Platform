@@ -2,7 +2,7 @@ import type { ReviewQueueDto } from '@app/shared'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import { ReviewActions } from '../components/ReviewActions.tsx'
-import { RelatedLink } from '../components/ReviewTaskList.tsx'
+import { TaskLinks } from '../components/ReviewTaskList.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
 import { Card, ErrorBox, Loading } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
@@ -32,7 +32,7 @@ export function ReviewQueue() {
               <span className="text-xs text-slate-400">opened {dateTime(t.created_at)}</span>
             </div>
             {t.note && <p className="mt-1 text-sm text-slate-600">{t.note}</p>}
-            {t.related_application_id && <RelatedLink id={t.related_application_id} />}
+            <TaskLinks task={t} />
             <ReviewActions applicationId={t.application_id} taskId={t.id} taskReason={t.reason} status={t.application_status} />
           </li>
         ))}
