@@ -13,10 +13,12 @@ import { transition } from '../domain/transition.js';
 import { createJobHandlers } from '../jobs/handlers.js';
 import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
+import { createFakeProviderClient } from '../providers/fake.js';
 
 /*
  * Phase 3 "Done when": submit each sample over HTTP, let the worker run, and
- * check where it lands. The start_verifications handler is still a stub.
+ * check where it lands. Providers are the in-memory fake (no callbacks), so
+ * VERIFYING is as far as these go; see verification/flow.test.ts for more.
  */
 
 const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
@@ -34,7 +36,7 @@ beforeEach(() => {
   const config = loadConfig({ DB_PATH: ':memory:' });
   const logger = createLogger({ level: 'silent' });
   app = createApp({ config, logger, db, now: () => clock });
-  worker = { db, config, logger, handlers: createJobHandlers() };
+  worker = { db, config, logger, handlers: createJobHandlers({ providers: createFakeProviderClient() }) };
 });
 afterEach(() => db.$client.close());
 
@@ -59,7 +61,9 @@ async function get(id: string): Promise<ApplicationDetailDto> {
   return ApplicationDetailDtoSchema.parse(res.body);
 }
 
-const trail = (dto: ApplicationDetailDto) => dto.audit_log.map((a) => `${a.from_state ?? '-'}>${a.to_state ?? '-'} ${a.event}`);
+// Status transitions only (non-transition events such as VERIFICATION_REQUESTED are left out).
+const trail = (dto: ApplicationDetailDto) =>
+  dto.audit_log.filter((a) => a.to_state !== null).map((a) => `${a.from_state ?? '-'}>${a.to_state ?? '-'} ${a.event}`);
 const jobsOf = (id: string) =>
   db.select().from(jobs).all().filter((j) => (j.payload as { application_id?: string }).application_id === id);
 
@@ -82,10 +86,11 @@ describe('extraction flow with the worker', () => {
     expect(dto.extracted_fields.find((f) => f.field === 'bank_account')!.value).toBe('**********7891');
     expect(dto.review_tasks).toEqual([]);
 
-    // extract done; start_verifications enqueued and run by the (stub) handler.
+    // extract done; start_verifications ran and scheduled one timeout per request.
     expect(jobsOf(id).map((j) => [j.type, j.status])).toEqual([
       ['extract', 'done'],
       ['start_verifications', 'done'],
+      ...Array(4).fill(['verification_timeout', 'queued']),
     ]);
   });
 
@@ -155,7 +160,8 @@ describe('extraction flow with the worker', () => {
     await drain();
     const dto = await get(id);
     expect(dto.status).toBe('VERIFYING');
-    expect(dto.audit_log).toHaveLength(3);
+    expect(trail(dto)).toHaveLength(3);
+    expect(dto.audit_log.filter((a) => a.event === 'VERIFICATION_REQUESTED')).toHaveLength(4);
   });
 
   it('a crash after EXTRACTING is retried and completes (idempotent)', async () => {

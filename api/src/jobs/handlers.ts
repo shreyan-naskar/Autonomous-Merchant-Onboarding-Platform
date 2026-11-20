@@ -1,4 +1,8 @@
+import { VerificationKindSchema } from '@app/shared';
+import { z } from 'zod';
 import { runExtraction } from '../extraction/job.js';
+import type { ProviderClient } from '../providers/client.js';
+import { runStartVerifications } from '../verification/start.js';
 import type { JobHandlers } from './worker.js';
 
 /** A job whose payload lacks application_id can never succeed; fail loudly (it will dead-letter). */
@@ -8,15 +12,21 @@ function applicationId(payload: Record<string, unknown>): string {
   return id;
 }
 
+const KindsSchema = z.array(VerificationKindSchema).min(1).optional();
+
+export interface JobHandlerDeps {
+  providers: ProviderClient;
+}
+
 /** The job registry, keyed by job type. Types without a handler are dead-lettered on first run. */
-export function createJobHandlers(): JobHandlers {
+export function createJobHandlers(deps: JobHandlerDeps): JobHandlers {
   return {
     extract: (payload, ctx) => {
       runExtraction(ctx, applicationId(payload));
     },
-    // Stub until Phase 4 calls the mock providers.
-    start_verifications: (payload, ctx) => {
-      ctx.logger.info({ application_id: applicationId(payload) }, 'start_verifications: stub (Phase 4)');
+    // payload: { application_id, kinds?: VerificationKind[] } (kinds defaults to all required checks)
+    start_verifications: async (payload, ctx) => {
+      await runStartVerifications(ctx, deps.providers, applicationId(payload), KindsSchema.parse(payload.kinds));
     },
   };
 }

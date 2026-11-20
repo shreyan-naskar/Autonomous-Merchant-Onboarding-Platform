@@ -1,8 +1,8 @@
 import { REQUIRED_CHECKS, type ApplicationStatus } from '@app/shared';
-import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { verifications, type Application } from '../db/schema.js';
+import type { Application } from '../db/schema.js';
 import { GuardError } from '../errors.js';
+import { currentVerification } from '../verification/latest.js';
 
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
@@ -15,23 +15,7 @@ export type Guard = (tx: Tx, app: Application) => void;
  * current bank_version (a bank change invalidates earlier results).
  */
 export const approvalGuard: Guard = (tx, app) => {
-  const missing = REQUIRED_CHECKS.filter((kind) => {
-    const latest = tx
-      .select({ status: verifications.status })
-      .from(verifications)
-      .where(
-        and(
-          eq(verifications.applicationId, app.id),
-          eq(verifications.kind, kind),
-          eq(verifications.superseded, false),
-          kind === 'BANK' ? eq(verifications.bankVersion, app.bankVersion) : undefined,
-        ),
-      )
-      .orderBy(desc(verifications.id))
-      .limit(1)
-      .get();
-    return latest?.status !== 'PASSED';
-  });
+  const missing = REQUIRED_CHECKS.filter((kind) => currentVerification(tx, app, kind)?.status !== 'PASSED');
   if (missing.length > 0) {
     throw new GuardError(`Cannot approve: checks not passed: ${missing.join(', ')}`, {
       missing,

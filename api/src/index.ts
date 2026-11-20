@@ -6,6 +6,7 @@ import { openDb } from './db/client.js';
 import { createJobHandlers } from './jobs/handlers.js';
 import { startWorker } from './jobs/worker.js';
 import { createLogger } from './logger.js';
+import { createHttpProviderClient } from './providers/client.js';
 
 // Load the repo-root .env for local dev (tests never import this file).
 const rootEnv = fileURLToPath(new URL('../../.env', import.meta.url));
@@ -20,7 +21,12 @@ const server = app.listen(config.port, () => {
   logger.info({ port: config.port, demoMode: config.demoMode }, `API running at http://localhost:${config.port}`);
 });
 
-const worker = startWorker({ db, config, logger, handlers: createJobHandlers() });
+const worker = startWorker({
+  db,
+  config,
+  logger,
+  handlers: createJobHandlers({ providers: createHttpProviderClient({ baseUrl: config.mockProviderUrl }) }),
+});
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
