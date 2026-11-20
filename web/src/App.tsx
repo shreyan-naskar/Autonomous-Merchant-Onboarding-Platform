@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from 'react-router'
 import { ApplicationDetail } from './pages/ApplicationDetail.tsx'
 import { ApplicationList } from './pages/ApplicationList.tsx'
+import { DemoPanel } from './pages/DemoPanel.tsx'
 import { ReviewQueue } from './pages/ReviewQueue.tsx'
 import { SubmitApplication } from './pages/SubmitApplication.tsx'
 
@@ -8,6 +9,7 @@ const NAV = [
   { to: '/', label: 'Applications' },
   { to: '/review', label: 'Review queue' },
   { to: '/submit', label: 'Submit' },
+  { to: '/demo', label: 'Demo controls' },
 ]
 
 export default function App() {
@@ -36,6 +38,7 @@ export default function App() {
           <Route path="/applications/:id" element={<ApplicationDetail />} />
           <Route path="/review" element={<ReviewQueue />} />
           <Route path="/submit" element={<SubmitApplication />} />
+          <Route path="/demo" element={<DemoPanel />} />
         </Routes>
       </main>
     </div>
