@@ -1,7 +1,7 @@
 import type { ApplicationStatus, AuditEvent } from '@app/shared';
-import type { ExtractionResult, FieldIssue } from './extract.js';
+import type { BlurryDocument, ExtractionResult, FieldIssue } from './extract.js';
 
-export type ExtractionReason = 'MISSING_INFO' | 'DOC_CONFLICT' | 'LOW_CONFIDENCE' | 'EXTRACTION_OK';
+export type ExtractionReason = 'MISSING_INFO' | 'BLURRY_DOCUMENT' | 'DOC_CONFLICT' | 'LOW_CONFIDENCE' | 'EXTRACTION_OK';
 
 export interface FieldProblem {
   document: string;
@@ -18,6 +18,7 @@ export interface ExtractionDecision {
   event: AuditEvent;
   /** What the merchant must supply: `form.<field>`, `document.<TYPE>`, `<TYPE>.<payload key>`. */
   missing: string[];
+  blurry: BlurryDocument[];
   conflicts: FieldProblem[];
   lowConfidence: FieldProblem[];
 }
@@ -25,11 +26,13 @@ export interface ExtractionDecision {
 /**
  * What to do after extraction. Pure. First matching rule wins:
  *  1. anything missing           -> NEEDS_INFO (MISSING_INFO)
- *  2. any field mismatches       -> IN_REVIEW  (DOC_CONFLICT)
- *  3. any confidence < threshold -> IN_REVIEW  (LOW_CONFIDENCE)
- *  4. otherwise                  -> VERIFYING  (EXTRACTION_OK)
+ *  2. any blurry uploaded image  -> IN_REVIEW  (BLURRY_DOCUMENT)
+ *  3. any field mismatches       -> IN_REVIEW  (DOC_CONFLICT)
+ *  4. any confidence < threshold -> IN_REVIEW  (LOW_CONFIDENCE)
+ *  5. otherwise                  -> VERIFYING  (EXTRACTION_OK)
  * Missing comes first because asking the merchant is cheaper than a review,
- * and a review of an incomplete application would just bounce back.
+ * and a review of an incomplete application would just bounce back. A blurry
+ * image comes before conflicts because nothing read from it can be trusted.
  */
 export function decideAfterExtraction(
   result: ExtractionResult,
@@ -54,8 +57,10 @@ export function decideAfterExtraction(
     .filter((f) => f.validationStatus !== 'missing' && f.confidence < confidenceThreshold)
     .map((f) => ({ document: f.documentType, field: f.field, issue: f.issue, confidence: f.confidence }));
 
-  const base = { missing, conflicts, lowConfidence };
+  const blurry = result.blurryDocuments;
+  const base = { missing, blurry, conflicts, lowConfidence };
   if (missing.length > 0) return { ...base, to: 'NEEDS_INFO', reason: 'MISSING_INFO', event: 'INFO_REQUIRED' };
+  if (blurry.length > 0) return { ...base, to: 'IN_REVIEW', reason: 'BLURRY_DOCUMENT', event: 'BLURRY_DOCUMENT' };
   if (conflicts.length > 0) return { ...base, to: 'IN_REVIEW', reason: 'DOC_CONFLICT', event: 'DOC_CONFLICT' };
   if (lowConfidence.length > 0) return { ...base, to: 'IN_REVIEW', reason: 'LOW_CONFIDENCE', event: 'LOW_CONFIDENCE' };
   return { ...base, to: 'VERIFYING', reason: 'EXTRACTION_OK', event: 'VERIFICATION_STARTED' };

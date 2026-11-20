@@ -16,6 +16,11 @@ const EnvSchema = z.object({
   RISK_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
   // Minimum normalized name similarity (0-1) between form and document names.
   NAME_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
+  // Laplacian variance below which an uploaded image is BLURRY_DOCUMENT.
+  // Calibrated on sample-data/pan-sharp.png (~990) vs pan-blurry.png (~1.7).
+  BLUR_THRESHOLD: z.coerce.number().min(0).default(30),
+  // Where tesseract.js keeps its downloaded English model.
+  OCR_CACHE_DIR: z.string().min(1).default('./.ocr-cache'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -63,7 +68,9 @@ export function loadConfig(env: Env = process.env) {
       confidence: e.CONFIDENCE_THRESHOLD,
       risk: e.RISK_THRESHOLD,
       nameMatch: e.NAME_MATCH_THRESHOLD,
+      blur: e.BLUR_THRESHOLD,
     },
+    ocrCacheDir: e.OCR_CACHE_DIR,
     timings: {
       // How long a provider request may stay PENDING before it is TIMED_OUT.
       verificationTimeoutMs: demo ? 30_000 : 15 * 60_000,

@@ -6,12 +6,14 @@ import { enqueueJob } from '../jobs/queue.js';
 import type { Logger } from '../logger.js';
 import { decideAfterExtraction, type ExtractionDecision, type FieldProblem } from './decide.js';
 import { extractFields } from './extract.js';
+import type { OcrEngine } from './ocr.js';
+import { readUploadedDocuments } from './read.js';
 
 export interface ExtractionDeps {
   db: Db;
   logger: Logger;
   now: number;
-  config: { thresholds: { confidence: number; nameMatch: number } };
+  config: { thresholds: { confidence: number; nameMatch: number; blur: number } };
 }
 
 const describeProblem = (p: FieldProblem) =>
@@ -24,10 +26,16 @@ const describeProblem = (p: FieldProblem) =>
     .join(', ')})`;
 
 /** Audit detail for the post-extraction transition. Field names and issues only, never values. */
-function auditDetail(d: ExtractionDecision, threshold: number) {
+function auditDetail(d: ExtractionDecision, threshold: number, blurThreshold: number) {
   switch (d.reason) {
     case 'MISSING_INFO':
       return { reason: d.reason, missing: d.missing };
+    case 'BLURRY_DOCUMENT':
+      return {
+        reason: d.reason,
+        blur_threshold: blurThreshold,
+        blurry: d.blurry.map((b) => ({ document: b.documentType, document_id: b.documentId, blur_score: b.blurScore })),
+      };
     case 'DOC_CONFLICT':
       return { reason: d.reason, conflicts: d.conflicts };
     case 'LOW_CONFIDENCE':
@@ -37,21 +45,33 @@ function auditDetail(d: ExtractionDecision, threshold: number) {
   }
 }
 
-function reviewNote(d: ExtractionDecision): string {
-  return d.reason === 'DOC_CONFLICT'
-    ? `Document/form conflict: ${d.conflicts.map(describeProblem).join('; ')}`
-    : `Low extraction confidence: ${d.lowConfidence.map(describeProblem).join('; ')}`;
+function reviewNote(d: ExtractionDecision, blurThreshold: number): string {
+  switch (d.reason) {
+    case 'BLURRY_DOCUMENT':
+      return `Blurry document image, re-upload or read manually: ${d.blurry
+        .map((b) => `${b.documentType} (blur score ${b.blurScore} < threshold ${blurThreshold})`)
+        .join('; ')}`;
+    case 'DOC_CONFLICT':
+      return `Document/form conflict: ${d.conflicts.map(describeProblem).join('; ')}`;
+    default:
+      return `Low extraction confidence: ${d.lowConfidence.map(describeProblem).join('; ')}`;
+  }
 }
 
 /**
- * The `extract` job. SUBMITTED -> EXTRACTING, then in one transaction:
+ * The `extract` job. SUBMITTED -> EXTRACTING, then reads uploaded images
+ * (blur check + OCR, outside any transaction), then in one transaction:
  * replace extracted_fields, transition to the decided state, open a review
  * task for IN_REVIEW, and enqueue `start_verifications` for VERIFYING.
  *
  * Idempotent: a retry finds the app in EXTRACTING and redoes the work; a
  * stale job (app already moved on) is a no-op.
  */
-export function runExtraction(deps: ExtractionDeps, appId: string): ExtractionDecision | null {
+export async function runExtraction(
+  deps: ExtractionDeps,
+  ocr: OcrEngine,
+  appId: string,
+): Promise<ExtractionDecision | null> {
   const { db, logger, now, config } = deps;
   let app = db.select().from(applications).where(eq(applications.id, appId)).get();
   if (!app) {
@@ -66,11 +86,21 @@ export function runExtraction(deps: ExtractionDeps, appId: string): ExtractionDe
   }
 
   const docs = db.select().from(documents).where(eq(documents.applicationId, appId)).orderBy(asc(documents.id)).all();
-  const result = extractFields(app, docs, { nameThreshold: config.thresholds.nameMatch });
+  const readings = await readUploadedDocuments(docs, { ocr, blurThreshold: config.thresholds.blur });
+  const result = extractFields(
+    app,
+    docs.map((d) => ({ ...d, reading: readings.get(d.id) })),
+    { nameThreshold: config.thresholds.nameMatch },
+  );
   const decision = decideAfterExtraction(result, { confidenceThreshold: config.thresholds.confidence });
 
   db.transaction(
     (tx) => {
+      for (const [docId, r] of readings) {
+        if (r.blurScore !== undefined) {
+          tx.update(documents).set({ blurScore: r.blurScore }).where(eq(documents.id, docId)).run();
+        }
+      }
       // Each extraction is a fresh snapshot of the current documents.
       tx.delete(extractedFields).where(eq(extractedFields.applicationId, appId)).run();
       if (result.fields.length > 0) {
@@ -91,13 +121,19 @@ export function runExtraction(deps: ExtractionDeps, appId: string): ExtractionDe
       transition(tx, appId, decision.to, {
         actor: 'system',
         event: decision.event,
-        detail: auditDetail(decision, config.thresholds.confidence),
+        detail: auditDetail(decision, config.thresholds.confidence, config.thresholds.blur),
         now,
       });
 
       if (decision.to === 'IN_REVIEW') {
         tx.insert(reviewTasks)
-          .values({ applicationId: appId, reason: decision.reason, status: 'OPEN', note: reviewNote(decision), createdAt: now })
+          .values({
+            applicationId: appId,
+            reason: decision.reason,
+            status: 'OPEN',
+            note: reviewNote(decision, config.thresholds.blur),
+            createdAt: now,
+          })
           .run();
       }
       if (decision.to === 'VERIFYING') {

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db/client.js';
+import { createTesseractOcr } from './extraction/ocr.js';
 import { createJobHandlers } from './jobs/handlers.js';
 import { startWorker } from './jobs/worker.js';
 import { createLogger } from './logger.js';
@@ -24,20 +25,30 @@ const server = app.listen(config.port, () => {
   logger.info({ port: config.port, demoMode: config.demoMode }, `API running at http://localhost:${config.port}`);
 });
 
+// OCR for uploaded images; the model loads on the first image, in the worker.
+const ocr = createTesseractOcr({ cacheDir: config.ocrCacheDir });
+
 const worker = startWorker({
   db,
   config,
   logger,
-  handlers: createJobHandlers({ providers: createHttpProviderClient({ baseUrl: config.mockProviderUrl }), merchantService }),
+  handlers: createJobHandlers({
+    providers: createHttpProviderClient({ baseUrl: config.mockProviderUrl }),
+    merchantService,
+    ocr,
+  }),
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     logger.info({ signal }, 'shutting down');
     server.close();
-    void worker.stop().finally(() => {
-      db.$client.close();
-      process.exit(0);
-    });
+    void worker
+      .stop()
+      .then(() => ocr.terminate())
+      .finally(() => {
+        db.$client.close();
+        process.exit(0);
+      });
   });
 }

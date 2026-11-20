@@ -1,0 +1,52 @@
+/*
+ * Generates the sample document images in sample-data/ (Phase 7):
+ *   pan-sharp.png   a clean, synthetic PAN card (OCR-readable)
+ *   pan-blurry.png  the same card with a Gaussian blur (fails the blur check)
+ *
+ * The card is fake: it uses the identity of sample-data/ocr-pan.json, not a
+ * real person or company. Run from the repo root:
+ *   npx tsx scripts/generate-sample-images.mts
+ */
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const out = join(root, 'sample-data');
+
+export const SAMPLE_CARD = {
+  pan: 'AAFCS4321M',
+  name: 'SUNRISE TRADERS PVT LTD',
+  date: '14/03/2019',
+} as const;
+
+function cardSvg({ pan, name, date }: typeof SAMPLE_CARD): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1012" height="638">
+  <rect width="100%" height="100%" fill="#ffffff"/>
+  <rect x="12" y="12" width="988" height="614" rx="24" fill="none" stroke="#1f3a68" stroke-width="6"/>
+  <g font-family="Liberation Sans, DejaVu Sans, Arial, sans-serif" fill="#111111">
+    <text x="60" y="90" font-size="40" font-weight="bold">INCOME TAX DEPARTMENT</text>
+    <text x="60" y="140" font-size="28">SAMPLE DOCUMENT - NOT VALID</text>
+    <text x="60" y="225" font-size="28">Permanent Account Number</text>
+    <text x="60" y="290" font-size="56" font-weight="bold" letter-spacing="4">${pan}</text>
+    <text x="60" y="375" font-size="28">Name</text>
+    <text x="60" y="430" font-size="44" font-weight="bold">${name}</text>
+    <text x="60" y="515" font-size="28">Date of Incorporation</text>
+    <text x="60" y="565" font-size="36">${date}</text>
+  </g>
+</svg>`;
+}
+
+async function main() {
+  mkdirSync(out, { recursive: true });
+  const base = sharp(Buffer.from(cardSvg(SAMPLE_CARD))).flatten({ background: '#ffffff' });
+  const sharpPng = await base.clone().png().toBuffer();
+  await sharp(sharpPng).toFile(join(out, 'pan-sharp.png'));
+  await sharp(sharpPng).blur(6).png().toFile(join(out, 'pan-blurry.png'));
+  console.log('wrote sample-data/pan-sharp.png, sample-data/pan-blurry.png');
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  await main();
+}

@@ -9,6 +9,7 @@ import {
   type DocumentType,
   type ValidationStatus,
 } from '@app/shared';
+import type { DocumentReading } from './read.js';
 
 /*
  * Extraction for structured (JSON) documents. Pure: takes the application's
@@ -27,7 +28,7 @@ export type FormField = (typeof REQUIRED_FORM_FIELDS)[number];
 export const STRUCTURED_CONFIDENCE = 1.0;
 /** Confidence for a value that is present but fails its format rule (below the 0.8 default threshold). */
 export const FORMAT_FAIL_CONFIDENCE = 0.5;
-/** An uploaded file with no structured payload: nothing could be read yet (OCR is Phase 7). */
+/** An uploaded file with no structured payload that could not be read (not OCR-able, blurry, or the value was not found). */
 export const UNREADABLE_CONFIDENCE = 0;
 
 type ValueKind = 'pan' | 'gstin' | 'bank_account' | 'ifsc' | 'name';
@@ -66,6 +67,7 @@ const FORMAT_CHECKS: Record<Exclude<ValueKind, 'name'>, (v: string) => boolean> 
 export type FieldIssue =
   | 'missing'
   | 'unreadable'
+  | 'blurry'
   | 'invalid_format'
   | 'differs_from_form'
   | 'gstin_pan_mismatch'
@@ -85,8 +87,15 @@ export interface ExtractedFieldResult {
   similarity?: number;
 }
 
+export interface BlurryDocument {
+  documentType: DocumentType;
+  documentId: number;
+  blurScore: number;
+}
+
 export interface ExtractionResult {
   fields: ExtractedFieldResult[];
+  blurryDocuments: BlurryDocument[];
   missingDocuments: DocumentType[];
   missingFormFields: FormField[];
 }
@@ -104,6 +113,8 @@ export interface ExtractionDocument {
   type: string;
   payload: unknown;
   path: string | null;
+  /** What was read from the uploaded file (OCR), when it was read. */
+  reading?: DocumentReading;
 }
 
 const FORM_KEY: Record<FormField, keyof ExtractionForm> = {
@@ -152,11 +163,16 @@ function compareWithForm(
 
 /**
  * Map documents to extracted fields. Per field, first matching rule wins:
+ *  - blurry uploaded image          -> `low_confidence`, confidence 0 (`blurry`)
  *  - absent value                  -> `missing`, confidence 0
+ *    (absent from an uploaded file's reading: `low_confidence`, `unreadable`)
  *  - uploaded file without payload -> `low_confidence`, confidence 0 (`unreadable`)
  *  - fails its format rule         -> `low_confidence`, confidence 0.5
  *  - disagrees with the form       -> `mismatch`, confidence 1.0
  *  - otherwise                     -> `ok`, confidence 1.0
+ * Values read from a file (OCR) carry the read's confidence instead of 1.0
+ * (and at most 0.5 when the format fails), so a poor read lands in
+ * LOW_CONFIDENCE review through the normal threshold.
  * Unknown document types are ignored; extra payload keys (e.g. dob) are not extracted.
  */
 export function extractFields(
@@ -171,19 +187,34 @@ export function extractFields(
     }
   }
 
-  const panCard = byType.get('PAN_CARD');
-  const panPayload = panCard?.payload as Record<string, unknown> | null | undefined;
+  const payloadOf = (d: ExtractionDocument | undefined): Record<string, unknown> | null =>
+    d?.payload && typeof d.payload === 'object'
+      ? (d.payload as Record<string, unknown>)
+      : (d?.reading?.payload ?? null);
+
+  const panPayload = payloadOf(byType.get('PAN_CARD'));
   const docPan = panPayload ? readValue(panPayload, DOCUMENT_FIELDS.PAN_CARD[0]!) : null;
 
   const fields: ExtractedFieldResult[] = [];
+  const blurryDocuments: BlurryDocument[] = [];
   for (const type of DOCUMENT_TYPES) {
     const doc = byType.get(type);
     if (!doc) continue;
-    const payload = doc.payload && typeof doc.payload === 'object' ? (doc.payload as Record<string, unknown>) : null;
+    const structured = doc.payload && typeof doc.payload === 'object';
+    const payload = payloadOf(doc);
+    // Values read from a file are only as good as the read (OCR confidence).
+    const fromFile = !structured && payload !== null;
+    const sourceConfidence = fromFile ? doc.reading!.confidence : STRUCTURED_CONFIDENCE;
+    const blurry = !structured && doc.reading?.blurry === true;
+    if (blurry) blurryDocuments.push({ documentType: type, documentId: doc.id, blurScore: doc.reading!.blurScore! });
 
     for (const spec of DOCUMENT_FIELDS[type]) {
       const base = { documentType: type, documentId: doc.id, sourceKey: spec.key, field: spec.field };
 
+      if (blurry) {
+        fields.push({ ...base, value: null, confidence: 0, validationStatus: 'low_confidence', issue: 'blurry' });
+        continue;
+      }
       if (!payload) {
         // A file we cannot read yet is not "missing": a human can look at it.
         const unreadable = doc.path !== null;
@@ -199,14 +230,19 @@ export function extractFields(
 
       const value = readValue(payload, spec);
       if (value === null) {
-        fields.push({ ...base, value: null, confidence: 0, validationStatus: 'missing', issue: 'missing' });
+        // Not found in a file that exists: a human can still read it, so not "missing".
+        fields.push(
+          fromFile
+            ? { ...base, value: null, confidence: UNREADABLE_CONFIDENCE, validationStatus: 'low_confidence', issue: 'unreadable' }
+            : { ...base, value: null, confidence: 0, validationStatus: 'missing', issue: 'missing' },
+        );
         continue;
       }
       if (spec.kind !== 'name' && !FORMAT_CHECKS[spec.kind](value)) {
         fields.push({
           ...base,
           value,
-          confidence: FORMAT_FAIL_CONFIDENCE,
+          confidence: Math.min(FORMAT_FAIL_CONFIDENCE, sourceConfidence),
           validationStatus: 'low_confidence',
           issue: 'invalid_format',
         });
@@ -216,7 +252,7 @@ export function extractFields(
       fields.push({
         ...base,
         value,
-        confidence: STRUCTURED_CONFIDENCE,
+        confidence: sourceConfidence,
         validationStatus: issue ? 'mismatch' : 'ok',
         ...(issue ? { issue } : {}),
         ...(similarity !== undefined ? { similarity } : {}),
@@ -226,6 +262,7 @@ export function extractFields(
 
   return {
     fields,
+    blurryDocuments,
     missingDocuments: REQUIRED_DOCUMENTS.filter((t) => !byType.has(t)),
     missingFormFields: REQUIRED_FORM_FIELDS.filter((f) => !form[FORM_KEY[f]]),
   };

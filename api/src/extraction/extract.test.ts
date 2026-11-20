@@ -146,6 +146,7 @@ describe('decideAfterExtraction', () => {
       reason: 'EXTRACTION_OK',
       event: 'VERIFICATION_STARTED',
       missing: [],
+      blurry: [],
       conflicts: [],
       lowConfidence: [],
     });
@@ -197,5 +198,90 @@ describe('decideAfterExtraction', () => {
     all.documents = all.documents.filter((d) => d.type !== 'GST_CERT');
     expect(run(all).decision).toMatchObject({ to: 'NEEDS_INFO', missing: ['document.GST_CERT'] });
     expect(run(all).decision.conflicts).toHaveLength(1);
+  });
+});
+
+describe('documents read from an uploaded image (OCR)', () => {
+  /** happy.json with the PAN card as an upload read by OCR. */
+  function withPanReading(reading: ExtractionDocument['reading']) {
+    const s = sample('happy.json');
+    const docs = docsOf(s).map((d) => (d.type === 'PAN_CARD' ? { ...d, payload: null, path: '/u/pan.png', reading } : d));
+    const result = extractFields(formOf(s), docs, OPTS);
+    return { result, decision: decideAfterExtraction(result, THRESHOLD) };
+  }
+  const read = (payload: Record<string, string>, confidence = 0.94) => ({
+    source: 'ocr' as const,
+    payload,
+    confidence,
+    blurScore: 900,
+    blurry: false,
+  });
+  const GOOD = { pan: 'AABCL1234K', name: 'LAKSHMI TEXTILES PVT LTD' };
+
+  it('a clean read: fields ok, carrying the OCR confidence -> VERIFYING', () => {
+    const { result, decision } = withPanReading(read(GOOD));
+    expect(field(result, 'pan')).toMatchObject({ validationStatus: 'ok', confidence: 0.94, value: 'AABCL1234K' });
+    expect(field(result, 'name')).toMatchObject({ validationStatus: 'ok', confidence: 0.94 });
+    expect(decision.reason).toBe('EXTRACTION_OK');
+  });
+
+  it('low OCR confidence -> IN_REVIEW LOW_CONFIDENCE', () => {
+    const { decision } = withPanReading(read(GOOD, 0.6));
+    expect(decision).toMatchObject({ to: 'IN_REVIEW', reason: 'LOW_CONFIDENCE' });
+    expect(decision.lowConfidence.map((p) => p.field)).toEqual(['pan', 'name']);
+  });
+
+  it('OCR read a PAN that differs from the form -> DOC_CONFLICT', () => {
+    const { decision } = withPanReading(read({ ...GOOD, pan: 'AABCL9999K' }));
+    expect(decision).toMatchObject({ to: 'IN_REVIEW', reason: 'DOC_CONFLICT' });
+    expect(decision.conflicts).toEqual([{ document: 'PAN_CARD', field: 'pan', issue: 'differs_from_form' }]);
+  });
+
+  it('a value OCR could not find is unreadable (review), not missing (NEEDS_INFO)', () => {
+    const { result, decision } = withPanReading(read({ pan: 'AABCL1234K' }));
+    expect(field(result, 'name')).toMatchObject({ validationStatus: 'low_confidence', issue: 'unreadable', confidence: 0 });
+    expect(decision).toMatchObject({ to: 'IN_REVIEW', reason: 'LOW_CONFIDENCE' });
+  });
+
+  it('a garbled PAN fails its format at no more than 0.5 (and no more than the OCR confidence)', () => {
+    const { result } = withPanReading(read({ ...GOOD, pan: 'AABC11234K' }, 0.4));
+    expect(field(result, 'pan')).toMatchObject({ validationStatus: 'low_confidence', issue: 'invalid_format', confidence: 0.4 });
+  });
+
+  it('a blurry image -> IN_REVIEW BLURRY_DOCUMENT, ahead of conflicts elsewhere', () => {
+    const s = sample('happy.json');
+    const docs = docsOf(s).map((d) =>
+      d.type === 'PAN_CARD'
+        ? { ...d, payload: null, path: '/u/pan.png', reading: { source: 'ocr' as const, payload: null, confidence: 0, blurScore: 1.7, blurry: true } }
+        : d.type === 'GST_CERT'
+          ? { ...d, payload: { gstin: s.gst!, legal_name: 'Someone Else Entirely' } }
+          : d,
+    );
+    const result = extractFields(formOf(s), docs, OPTS);
+    expect(result.blurryDocuments).toEqual([{ documentType: 'PAN_CARD', documentId: 1, blurScore: 1.7 }]);
+    expect(field(result, 'pan')).toMatchObject({ validationStatus: 'low_confidence', issue: 'blurry', value: null });
+    const decision = decideAfterExtraction(result, THRESHOLD);
+    expect(decision).toMatchObject({ to: 'IN_REVIEW', reason: 'BLURRY_DOCUMENT', event: 'BLURRY_DOCUMENT' });
+    expect(decision.conflicts).toHaveLength(1);
+  });
+
+  it('missing information still wins over a blurry image (NEEDS_INFO)', () => {
+    const s = sample('happy.json');
+    const docs = docsOf(s)
+      .filter((d) => d.type !== 'GST_CERT')
+      .map((d) =>
+        d.type === 'PAN_CARD'
+          ? { ...d, payload: null, path: '/u/pan.png', reading: { source: 'ocr' as const, payload: null, confidence: 0, blurScore: 1, blurry: true } }
+          : d,
+      );
+    expect(decideAfterExtraction(extractFields(formOf(s), docs, OPTS), THRESHOLD).reason).toBe('MISSING_INFO');
+  });
+
+  it('a structured payload wins over a reading of the same document', () => {
+    const s = sample('happy.json');
+    const docs = docsOf(s).map((d) =>
+      d.type === 'PAN_CARD' ? { ...d, reading: { source: 'ocr' as const, payload: null, confidence: 0, blurScore: 1, blurry: true } } : d,
+    );
+    expect(decideAfterExtraction(extractFields(formOf(s), docs, OPTS), THRESHOLD).reason).toBe('EXTRACTION_OK');
   });
 });

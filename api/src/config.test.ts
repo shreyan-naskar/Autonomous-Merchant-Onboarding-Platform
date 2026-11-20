@@ -10,7 +10,7 @@ describe('loadConfig', () => {
     expect(c.webhookUrl).toBe('http://localhost:3000/webhooks/provider');
     expect(c.hmacSecret.length).toBeGreaterThan(0);
     expect(c.demoMode).toBe(true);
-    expect(c.thresholds).toEqual({ confidence: 0.8, risk: 70, nameMatch: 0.85 });
+    expect(c.thresholds).toEqual({ confidence: 0.8, risk: 70, nameMatch: 0.85, blur: 30 });
   });
 
   it('uses short timings in demo mode and longer ones otherwise', () => {

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { runApprove } from '../approval/approve.js';
 import type { Db } from '../db/client.js';
 import { runExtraction } from '../extraction/job.js';
+import type { OcrEngine } from '../extraction/ocr.js';
 import { runCreateMerchant } from '../merchant/create.js';
 import { createSimulatedMerchantService, type MerchantService } from '../merchant/service.js';
 import type { ProviderClient } from '../providers/client.js';
@@ -27,7 +28,18 @@ export interface JobHandlerDeps {
    * Defaults to a simulated service on the job's DB.
    */
   merchantService?: MerchantService;
+  /**
+   * OCR for uploaded images (extract job only). Required only when an
+   * application has an uploaded image that passes the blur check; without
+   * it such a job fails and is retried / dead-lettered.
+   */
+  ocr?: OcrEngine;
 }
+
+const noOcr: OcrEngine = {
+  recognize: () => Promise.reject(new Error('OCR engine not configured')),
+  terminate: () => Promise.resolve(),
+};
 
 /** The job registry, keyed by job type. Types without a handler are dead-lettered on first run. */
 export function createJobHandlers(deps: JobHandlerDeps): JobHandlers {
@@ -38,8 +50,8 @@ export function createJobHandlers(deps: JobHandlerDeps): JobHandlers {
     return fallback.get(db)!;
   };
   return {
-    extract: (payload, ctx) => {
-      runExtraction(ctx, applicationId(payload));
+    extract: async (payload, ctx) => {
+      await runExtraction(ctx, deps.ocr ?? noOcr, applicationId(payload));
     },
     // payload: { application_id, kinds?: VerificationKind[], bank_version?: number }
     // (kinds defaults to all required checks; bank_version marks a bank-change re-run)
