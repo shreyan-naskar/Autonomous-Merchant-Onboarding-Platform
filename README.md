@@ -25,7 +25,7 @@ cd Autonomous-Merchant-Onboarding-Platform
 npm install                               # better-sqlite3 and sharp ship prebuilt binaries; no extra dnf packages needed
 cp .env.example .env                      # optional: every value is also a built-in default
 
-npm test                                  # 424 tests
+npm test                                  # 424 tests (the real-OCR one is skipped until the model is cached)
 npm run demo                              # starts API + mock providers on a fresh DB and runs the scripted demo
 npm run dev                               # API :3000, mock providers :4000, web :5173 -> open http://localhost:5173
 ```

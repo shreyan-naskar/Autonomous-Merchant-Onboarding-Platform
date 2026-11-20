@@ -17,7 +17,7 @@ from these two files alone.
 | 5. Approval, MID, bank change | DONE | approve job, review endpoint, create_merchant + MID service, bank change |
 | 6. UI | DONE | all six pages; demo script verified through the Vite proxy, not clicked in a browser |
 | 7. Stretch | DONE | all four: blur + OCR, duplicates, dead-letter view, PDF text |
-| 8. Hardening, docs, demo | NEXT | |
+| 8. Hardening, docs, demo | DONE | scenario + security tests, `npm run demo`, README, DEMO.md, tag v1.0 |
 
 ## Standing decisions (resolved plan gaps — follow these)
 
@@ -326,6 +326,21 @@ These come from the kickoff prompt and override or refine PLAN.md:
   tasks show `TaskLinks` (related app / dead-letter link).
 - New audit events: `BLURRY_DOCUMENT`, `POSSIBLE_DUPLICATE`,
   `REVIEW_TASK_DISMISSED`, `JOB_REQUEUED`.
+- Phase 8: `api/src/e2e.ts` `startE2E({logStream?, logLevel?})` is the
+  shared end-to-end harness (API + mock on random ports, fake clock,
+  `drain(horizon)`, `deliver(ms)`, `submit/detail/review`). Brief scenarios:
+  `api/src/scenarios.test.ts`; security checks: `api/src/security.test.ts`.
+- `npm run demo` = `scripts/demo.ts` (CJS via tsx: no top-level await).
+  Spawns `tsx src/index.ts` in api/ and mock-providers/ with
+  `DB_PATH=api/data/demo.db` (deleted first, LOG_LEVEL=debug, logs in
+  `api/data/demo-*.log`), or with both services already up resets them via
+  `POST /admin/reset-data` (API, DEMO_MODE only) + mock `/admin/reset`.
+  Duplicate via mock `POST /admin/redeliver {event_id?}`. Flags
+  `--external` / `--spawn` (`npm run demo -- --external`).
+- `OperatorNoteSchema` (shared) is the one note rule; `POST
+  /jobs/:id/requeue` takes `{note}`.
+- `.env.example` documents every setting; no `.env` is needed (API and
+  mock share the default dev HMAC secret).
 
 ## Deviations from PLAN.md
 
@@ -733,3 +748,46 @@ Verified live (api + mock-providers via tsx, scratch DB, curl):
 
 Not verified: the new UI (Dead letters page, Dismiss button, related-app
 links) in a real browser; it typechecks and builds.
+
+### Phase 8: Hardening, docs, demo — DONE (2026-11-21)
+
+1. Tests: suite run 8 times (5 with `--sequence.shuffle`), no flakes; all
+   timing is virtual. New `api/src/scenarios.test.ts`: SCENARIO 1-6b, one
+   named end-to-end test per brief failure scenario (PAN ok/GST fail,
+   duplicate callback, late callback, bank change after verification,
+   merchant ID failure, DOC_CONFLICT, BLURRY_DOCUMENT), listed in the README
+   with file paths.
+2. Security pass, kept as `api/src/security.test.ts`: status written only
+   by `transition()` (source scan; the other `update(applications)` calls set
+   bank_version, merchant_id or whitelisted form fields); full flows at debug
+   level with a PAN typed into an operator note: no raw PAN/GSTIN/account in
+   logs or responses (mutation-checked: fails when masking is removed);
+   webhook 401 for missing/wrong/tampered/malformed signatures with nothing
+   stored; every resolution needs a note. Found and fixed: dead-letter
+   requeue was an operator action without a note (now required, audited);
+   a missing note gave Zod's generic message (now "Note is required").
+3. `npm run demo` (see Repo facts): 14 checks plus both audit trails as
+   tables and a log scan for raw values.
+4. README rewritten (quick start, Mermaid diagrams, API summary, scenarios,
+   assumptions, mocks, limitations, production path, data handling, all
+   deviations). 5. `docs/DEMO.md` with a verified curl fallback per step.
+
+Test results (`npm test`):
+```
+ Test Files  33 passed (33)
+      Tests  424 passed (424)      # fresh clone: 423 passed, 1 skipped (real OCR, no cached model)
+```
+`npm run typecheck` clean.
+
+Verified:
+- `npm run demo` against `npm run dev` twice (second run reset 2 apps).
+- Every DEMO.md curl fallback run against `npm run dev` (the 409 guard text
+  matches the doc).
+- Final: fresh `git clone` of HEAD (no .env, no node_modules, no OCR
+  cache) -> `npm ci` -> `npm test` -> `npm run demo` twice: both exit 0,
+  14/14 checks, 0 raw values in the API logs, ports released.
+
+Not verified: the UI in a real browser (no browser tool in these sessions);
+the click-by-click DEMO.md steps are built from the page code, and their API
+calls were run via curl. Mermaid diagrams were not rendered locally.
+
