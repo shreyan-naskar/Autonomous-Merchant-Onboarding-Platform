@@ -43,4 +43,13 @@ describe('logger redaction', () => {
     expect(out).not.toContain(PAN);
     expect(out).not.toContain(ACCT);
   });
+
+  it('masks gst / gstin (a GSTIN embeds the PAN)', () => {
+    const { lines, logger } = capture();
+    const GSTIN = `27${PAN}1Z5`;
+    logger.info({ gst: GSTIN, body: { documents: [{ payload: { gstin: GSTIN } }] } }, 'gst');
+    const out = lines.join('');
+    expect(out).not.toContain(PAN);
+    expect(out).toContain('F1Z5');
+  });
 });

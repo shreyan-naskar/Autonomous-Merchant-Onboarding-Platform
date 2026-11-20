@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createApp } from '../app.js';
 import { loadConfig } from '../config.js';
+import { openDb } from '../db/client.js';
 import { GuardError, NotFoundError } from '../errors.js';
 import { createLogger } from '../logger.js';
 
@@ -21,6 +22,7 @@ function makeApp() {
   const app = createApp({
     config: loadConfig({ DB_PATH: ':memory:' }),
     logger: createLogger({ level: 'debug', stream }),
+    db: openDb(':memory:'),
     mount(app) {
       app.get('/boom', async () => {
         await Promise.resolve();

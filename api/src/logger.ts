@@ -1,8 +1,5 @@
 import { pino, type DestinationStream, type Logger } from 'pino';
-import { mask, redactText } from '@app/shared';
-
-/** Field names that must never be logged in clear text. */
-const SENSITIVE_KEYS = ['pan', 'bank_account', 'bankAccount', 'account_number', 'accountNumber'];
+import { mask, redactText, SENSITIVE_KEYS } from '@app/shared';
 
 /**
  * pino/fast-redact has no recursive wildcard, so enumerate paths up to a fixed

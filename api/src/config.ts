@@ -6,6 +6,8 @@ export const DEV_HMAC_SECRET = 'dev-only-hmac-secret-change-me';
 const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   DB_PATH: z.string().min(1).default('./data/app.db'),
+  // Relative to the API's working directory (api/ under npm workspaces).
+  UPLOAD_DIR: z.string().min(1).default('./uploads'),
   WEBHOOK_URL: z.url().default('http://localhost:3000/webhooks/provider'),
   MOCK_PROVIDER_URL: z.url().default('http://localhost:4000'),
   HMAC_SECRET: z.string().min(1).default(DEV_HMAC_SECRET),
@@ -49,6 +51,7 @@ export function loadConfig(env: Env = process.env) {
   return {
     port: e.PORT,
     dbPath: e.DB_PATH,
+    uploadDir: e.UPLOAD_DIR,
     webhookUrl: e.WEBHOOK_URL,
     mockProviderUrl: e.MOCK_PROVIDER_URL,
     hmacSecret: e.HMAC_SECRET,

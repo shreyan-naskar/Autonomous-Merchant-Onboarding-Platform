@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler, RequestHandler } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { redactText } from '@app/shared';
 import { AppError } from '../errors.js';
@@ -40,6 +41,10 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
           })),
         },
       };
+    } else if (err instanceof multer.MulterError) {
+      // Upload limits / unexpected file parts. Messages are multer's fixed strings.
+      status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      body = { error: { code: 'UPLOAD_REJECTED', message: err.message, details: { reason: err.code, field: err.field } } };
     } else if (isBodyParserError(err) && err.status >= 400 && err.status < 500) {
       status = err.status;
       const message = err.type === 'entity.parse.failed' ? 'Malformed JSON body' : 'Invalid request body';
@@ -49,7 +54,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     }
 
     const log = status >= 500 ? logger.error.bind(logger) : logger.warn.bind(logger);
-    log({ err, method: req.method, path: req.path, status }, 'request failed');
+    log({ err, method: req.method, path: req.originalUrl.split('?')[0], status }, 'request failed');
 
     res.status(status).json(body);
   };
