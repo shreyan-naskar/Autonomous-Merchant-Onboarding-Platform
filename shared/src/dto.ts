@@ -132,3 +132,23 @@ export const ApplicationDetailDtoSchema = ApplicationSummaryDtoSchema.extend({
   audit_log: z.array(AuditEntryDtoSchema),
 });
 export type ApplicationDetailDto = z.infer<typeof ApplicationDetailDtoSchema>;
+
+/** `GET /metrics`, computed from audit_log. */
+export const StateMetricDtoSchema = z.object({
+  state: ApplicationStatusSchema,
+  /** Mean duration of completed stays in this state (entered and later left); null if none. */
+  avg_ms: z.number().nullable(),
+  /** Number of completed stays averaged. */
+  completed: z.number().int(),
+  /** Applications in this state right now. */
+  current: z.number().int(),
+});
+export const MetricsDtoSchema = z.object({
+  total_applications: z.number().int(),
+  /** Applications that ever entered IN_REVIEW or NEEDS_INFO. */
+  exception_count: z.number().int(),
+  /** exception_count / total_applications (0 when there are none). */
+  exception_rate: z.number(),
+  states: z.array(StateMetricDtoSchema),
+});
+export type MetricsDto = z.infer<typeof MetricsDtoSchema>;

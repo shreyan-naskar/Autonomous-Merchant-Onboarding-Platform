@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
 import type { Logger } from './logger.js';
+import { getMetrics } from './metrics/metrics.js';
 import { createSimulatedMerchantService, type SimulatedMerchantService } from './merchant/service.js';
 import { errorHandler, notFoundHandler } from './http/errorHandler.js';
 import { adminRouter } from './http/routes/admin.js';
@@ -50,6 +51,10 @@ export function createApp(deps: AppDeps): Express {
   });
 
   app.use('/applications', applicationsRouter({ db, logger, config, uploadDir: config.uploadDir, now }));
+
+  app.get('/metrics', (_req, res) => {
+    res.json(getMetrics(db));
+  });
 
   app.use('/review-tasks', reviewTasksRouter({ db }));
   app.use('/admin', adminRouter({ merchantService, logger }));
