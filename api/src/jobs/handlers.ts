@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { runExtraction } from '../extraction/job.js';
 import type { ProviderClient } from '../providers/client.js';
 import { runStartVerifications } from '../verification/start.js';
+import { runVerificationTimeout } from '../verification/timeout.js';
 import type { JobHandlers } from './worker.js';
 
 /** A job whose payload lacks application_id can never succeed; fail loudly (it will dead-letter). */
@@ -27,6 +28,10 @@ export function createJobHandlers(deps: JobHandlerDeps): JobHandlers {
     // payload: { application_id, kinds?: VerificationKind[] } (kinds defaults to all required checks)
     start_verifications: async (payload, ctx) => {
       await runStartVerifications(ctx, deps.providers, applicationId(payload), KindsSchema.parse(payload.kinds));
+    },
+    // payload: { application_id, verification_id }; scheduled per provider request.
+    verification_timeout: (payload, ctx) => {
+      runVerificationTimeout(ctx, z.number().int().parse(payload.verification_id));
     },
     // Enqueued by evaluate() on VERIFIED. Stub until Phase 5 adds auto-approval.
     approve: (payload, ctx) => {
