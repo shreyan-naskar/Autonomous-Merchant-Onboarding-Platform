@@ -25,6 +25,16 @@ export interface StartResult {
 }
 
 /**
+ * Requests are made in VERIFYING. A bank-change re-run (payload carries the
+ * bank_version it was enqueued for) may also run in IN_REVIEW, and is
+ * skipped once a newer bank change has bumped the version again.
+ */
+function canRequest(app: Application, bankVersion?: number): boolean {
+  if (bankVersion === undefined) return app.status === 'VERIFYING';
+  return bankVersion === app.bankVersion && (app.status === 'VERIFYING' || app.status === 'IN_REVIEW');
+}
+
+/**
  * Decide which kinds need a provider request and reserve a PENDING row for
  * each (one transaction). A kind needs a request when it has no current row
  * (first run, or the old one was superseded / is for an old bank_version) or
@@ -32,11 +42,11 @@ export interface StartResult {
  * request_id is left over from a failed run and is reused, so retrying this
  * job never creates duplicate rows.
  */
-function reserveRows(db: Db, appId: string, kinds: readonly VerificationKind[], now: number) {
+function reserveRows(db: Db, appId: string, kinds: readonly VerificationKind[], now: number, bankVersion?: number) {
   return db.transaction(
     (tx) => {
       const app = tx.select().from(applications).where(eq(applications.id, appId)).get();
-      if (!app || app.status !== 'VERIFYING') return { app, rows: [] as Verification[], skipped: [...kinds] };
+      if (!app || !canRequest(app, bankVersion)) return { app, rows: [] as Verification[], skipped: [...kinds] };
 
       const rows: Verification[] = [];
       const skipped: VerificationKind[] = [];
@@ -114,7 +124,7 @@ function recordRequested(deps: VerificationDeps, app: Application, row: Verifica
 
 /**
  * The `start_verifications` job: request the given checks (default: all
- * required) for an application in VERIFYING. Provider calls happen outside
+ * required) for an application in VERIFYING (see canRequest for bank re-runs). Provider calls happen outside
  * any DB transaction. If any call fails the job throws after the others are
  * recorded, so the worker retries only what is still missing.
  */
@@ -123,11 +133,12 @@ export async function runStartVerifications(
   providers: ProviderClient,
   appId: string,
   kinds: readonly VerificationKind[] = REQUIRED_CHECKS,
+  bankVersion?: number,
 ): Promise<StartResult> {
   const { logger } = deps;
-  const { app, rows, skipped } = reserveRows(deps.db, appId, kinds, deps.now);
-  if (!app || app.status !== 'VERIFYING') {
-    logger.info({ application_id: appId, status: app?.status }, 'start_verifications: application not in VERIFYING, skipping');
+  const { app, rows, skipped } = reserveRows(deps.db, appId, kinds, deps.now, bankVersion);
+  if (!app || !canRequest(app, bankVersion)) {
+    logger.info({ application_id: appId, status: app?.status, bank_version: bankVersion }, 'start_verifications: not applicable, skipping');
     return { requested: [], skipped };
   }
 

@@ -1,6 +1,6 @@
 import { REQUIRED_CHECKS, type VerificationKind, type VerificationStatus } from '@app/shared';
-import { eq } from 'drizzle-orm';
-import { applications, reviewTasks, type Verification } from '../db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { applications, auditLog, reviewTasks, type Verification } from '../db/schema.js';
 import type { Tx } from '../domain/guards.js';
 import { transition } from '../domain/transition.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -64,6 +64,37 @@ function describeChecks(current: Partial<Record<VerificationKind, Verification>>
 }
 
 /**
+ * A BANK_CHANGED task only flags that the bank is being re-verified; once
+ * every check passes again (new bank_version included) it is resolved
+ * automatically (resolution AUTO_REVERIFIED) so it does not linger in the queue.
+ */
+function resolveBankChangedTasks(tx: Tx, appId: string, bankVersion: number, now: number) {
+  const resolved = tx
+    .update(reviewTasks)
+    .set({
+      status: 'RESOLVED',
+      resolution: 'AUTO_REVERIFIED',
+      resolutionNote: `Bank details re-verified (bank version ${bankVersion})`,
+      resolvedAt: now,
+    })
+    .where(and(eq(reviewTasks.applicationId, appId), eq(reviewTasks.reason, 'BANK_CHANGED'), eq(reviewTasks.status, 'OPEN')))
+    .returning({ id: reviewTasks.id })
+    .all();
+  if (resolved.length === 0) return;
+  tx.insert(auditLog)
+    .values({
+      applicationId: appId,
+      at: now,
+      actor: 'system',
+      fromState: 'VERIFIED',
+      toState: null,
+      event: 'REVIEW_TASK_AUTO_RESOLVED',
+      detail: { task_ids: resolved.map((r) => r.id), reason: 'BANK_CHANGED', bank_version: bankVersion },
+    })
+    .run();
+}
+
+/**
  * Re-evaluate an application after a verification changed. Only acts in
  * VERIFYING (callbacks arriving in IN_REVIEW or later are recorded but do
  * not move the application). All required checks PASSED -> VERIFIED plus an
@@ -94,6 +125,7 @@ export function evaluate(tx: Tx, appId: string, now: number): EvaluateResult {
       now,
     });
     enqueueJob(tx, 'approve', { application_id: appId }, { now });
+    resolveBankChangedTasks(tx, appId, app.bankVersion, now);
     return { action: 'VERIFIED' };
   }
 

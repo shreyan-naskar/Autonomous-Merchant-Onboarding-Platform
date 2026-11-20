@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ApplicationStatus, DocumentType } from '@app/shared';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
-import { applications, auditLog, documents, type Application } from '../db/schema.js';
+import { applications, auditLog, documents, reviewTasks, verifications, type Application } from '../db/schema.js';
 import { ConflictError, NotFoundError } from '../errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import type { Tx } from './guards.js';
@@ -115,6 +115,57 @@ export interface ApplicationPatch extends Partial<NewApplicationInput> {
   documents?: NewDocumentInput[];
 }
 
+/** States in which BANK may already be verified or in flight: a bank change re-runs it. */
+const BANK_REVERIFY_STATES: readonly ApplicationStatus[] = ['VERIFYING', 'VERIFIED', 'IN_REVIEW'];
+
+/**
+ * Bank details changed after verification started (Plan gaps resolved, item 5).
+ * Bumps bank_version and supersedes every BANK row, so the approval guard
+ * blocks until BANK passes for the new version and old-version callbacks are
+ * STALE. Then re-runs BANK only:
+ * - VERIFIED: -> IN_REVIEW (merchant, BANK_CHANGED, review task BANK_CHANGED)
+ *   -> VERIFYING (system, BANK_REVERIFICATION_STARTED); evaluate() returns it
+ *   to VERIFIED and auto-resolves the task.
+ * - VERIFYING / IN_REVIEW: status unchanged, audit BANK_CHANGED.
+ */
+function applyBankChange(tx: Tx, app: Application, changed: string[], now: number): Application {
+  const from = app.bankVersion;
+  const to = from + 1;
+  tx.update(applications).set({ bankVersion: to }).where(eq(applications.id, app.id)).run();
+  tx.update(verifications)
+    .set({ superseded: true })
+    .where(and(eq(verifications.applicationId, app.id), eq(verifications.kind, 'BANK'), eq(verifications.superseded, false)))
+    .run();
+  const detail = { fields: changed, bank_version_from: from, bank_version_to: to };
+
+  let updated: Application;
+  if (app.status === 'VERIFIED') {
+    transition(tx, app.id, 'IN_REVIEW', { actor: 'merchant', event: 'BANK_CHANGED', detail, now });
+    tx.insert(reviewTasks)
+      .values({
+        applicationId: app.id,
+        reason: 'BANK_CHANGED',
+        status: 'OPEN',
+        note: `Bank details changed after verification (bank version ${from} -> ${to}); BANK is being re-verified. Approval is blocked until it passes.`,
+        createdAt: now,
+      })
+      .run();
+    updated = transition(tx, app.id, 'VERIFYING', {
+      actor: 'system',
+      event: 'BANK_REVERIFICATION_STARTED',
+      detail: { kinds: ['BANK'], bank_version: to },
+      now,
+    });
+  } else {
+    tx.insert(auditLog)
+      .values({ applicationId: app.id, at: now, actor: 'merchant', fromState: app.status, toState: null, event: 'BANK_CHANGED', detail })
+      .run();
+    updated = tx.select().from(applications).where(eq(applications.id, app.id)).get()!;
+  }
+  enqueueJob(tx, 'start_verifications', { application_id: app.id, kinds: ['BANK'], bank_version: to }, { now });
+  return updated;
+}
+
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /**
@@ -123,8 +174,10 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.
  * - In NEEDS_INFO, any real change is the merchant supplying the requested
  *   info: NEEDS_INFO -> EXTRACTING (actor merchant, event INFO_SUPPLIED) and
  *   a new `extract` job, in the same transaction as the edit.
+ * - A bank_account / ifsc change in VERIFYING, VERIFIED or IN_REVIEW goes
+ *   through applyBankChange (version bump + BANK re-run).
  * - Elsewhere, persists the fields and writes APPLICATION_UPDATED; status is
- *   untouched (bank-change re-verification is Phase 5).
+ *   untouched.
  * Audit details name the changed fields / document types, never values.
  */
 export function updateApplication(
@@ -191,6 +244,10 @@ export function updateApplication(
         });
         enqueueJob(tx, 'extract', { application_id: id }, { now });
         return updated;
+      }
+
+      if ((changes.bankAccount !== undefined || changes.ifsc !== undefined) && BANK_REVERIFY_STATES.includes(app.status)) {
+        return applyBankChange(tx, updated, changed, now);
       }
 
       tx.insert(auditLog)

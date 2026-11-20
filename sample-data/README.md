@@ -16,6 +16,7 @@ embeds the PAN (characters 3-12), as a real GSTIN does.
 | `gst-fail.json` | GSTIN `29AACCM5678P1Z9` | **GST ending `Z9`**: the mock GST provider fails it | PAN passes, GST fails -> `IN_REVIEW` (`PAN_OK_GST_FAILED`) |
 | `conflict.json` | PAN card name `Ramesh Electricals Pvt Ltd` vs form `Ganesh Hardware Stores` | document name differs from form name | `IN_REVIEW` with review task `DOC_CONFLICT` |
 | `missing.json` | no `GST_CERT` document | required document missing | `NEEDS_INFO`, missing items listed in the audit detail |
+| `high-risk.json` | merchant name `Risky Ventures Pvt Ltd` | **name containing `RISKY`**: risk score 85 | all checks pass -> `VERIFIED` -> `IN_REVIEW` (`HIGH_RISK`); operator approve -> `MERCHANT_CREATED` |
 
 Other magic values understood by the mock providers (not used by a file here,
 set them in a copy of `happy.json` to try them):

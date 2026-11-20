@@ -41,9 +41,16 @@ export function createJobHandlers(deps: JobHandlerDeps): JobHandlers {
     extract: (payload, ctx) => {
       runExtraction(ctx, applicationId(payload));
     },
-    // payload: { application_id, kinds?: VerificationKind[] } (kinds defaults to all required checks)
+    // payload: { application_id, kinds?: VerificationKind[], bank_version?: number }
+    // (kinds defaults to all required checks; bank_version marks a bank-change re-run)
     start_verifications: async (payload, ctx) => {
-      await runStartVerifications(ctx, deps.providers, applicationId(payload), KindsSchema.parse(payload.kinds));
+      await runStartVerifications(
+        ctx,
+        deps.providers,
+        applicationId(payload),
+        KindsSchema.parse(payload.kinds),
+        z.number().int().optional().parse(payload.bank_version),
+      );
     },
     // payload: { application_id, verification_id }; scheduled per provider request.
     verification_timeout: (payload, ctx) => {
