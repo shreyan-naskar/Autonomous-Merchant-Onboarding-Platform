@@ -518,7 +518,7 @@ fails 2; no bank_version bump fails 3; no per-resolution source states fails
 
 Test results (`npm test`, three consecutive runs):
 ```
- Test Files  25 passed (25)
+ Test Files  24 passed (24)
       Tests  333 passed (333)
 ```
 Checks: live API (:3999, scratch DB) + mock (:4999), real timers.
