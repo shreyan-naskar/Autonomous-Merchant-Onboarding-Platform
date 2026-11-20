@@ -6,6 +6,7 @@ import { openDb } from './db/client.js';
 import { createJobHandlers } from './jobs/handlers.js';
 import { startWorker } from './jobs/worker.js';
 import { createLogger } from './logger.js';
+import { createSimulatedMerchantService } from './merchant/service.js';
 import { createHttpProviderClient } from './providers/client.js';
 
 // Load the repo-root .env for local dev (tests never import this file).
@@ -15,7 +16,9 @@ if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 const config = loadConfig(process.env);
 const logger = createLogger({ level: config.logLevel });
 const db = openDb(config.dbPath);
-const app = createApp({ config, logger, db });
+// One instance shared by the API (failure flag) and the worker (create_merchant).
+const merchantService = createSimulatedMerchantService(db);
+const app = createApp({ config, logger, db, merchantService });
 
 const server = app.listen(config.port, () => {
   logger.info({ port: config.port, demoMode: config.demoMode }, `API running at http://localhost:${config.port}`);
@@ -25,7 +28,7 @@ const worker = startWorker({
   db,
   config,
   logger,
-  handlers: createJobHandlers({ providers: createHttpProviderClient({ baseUrl: config.mockProviderUrl }) }),
+  handlers: createJobHandlers({ providers: createHttpProviderClient({ baseUrl: config.mockProviderUrl }), merchantService }),
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

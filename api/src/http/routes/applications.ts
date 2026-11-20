@@ -7,6 +7,7 @@ import {
   CreateApplicationMultipartFieldsSchema,
   DOCUMENT_TYPES,
   ListApplicationsQuerySchema,
+  ReviewRequestSchema,
   MAX_UPLOAD_BYTES,
   UPLOAD_MIME_TYPES,
   UpdateApplicationSchema,
@@ -16,6 +17,7 @@ import {
 } from '@app/shared';
 import { Router, type Request } from 'express';
 import multer from 'multer';
+import type { Config } from '../../config.js';
 import type { Db } from '../../db/client.js';
 import { getApplicationDetail, listApplications } from '../../domain/queries.js';
 import {
@@ -26,11 +28,13 @@ import {
 } from '../../domain/applications.js';
 import { BadRequestError, NotFoundError } from '../../errors.js';
 import type { Logger } from '../../logger.js';
+import { resolveReview } from '../../review/resolve.js';
 import { toDetailDto, toSummaryDto } from '../dto.js';
 
 export interface ApplicationsRouterDeps {
   db: Db;
   logger: Logger;
+  config: Config;
   uploadDir: string;
   now: () => number;
 }
@@ -49,7 +53,7 @@ function uploadedFiles(req: Request): Express.Multer.File[] {
   return files ? Object.values(files).flat() : [];
 }
 
-export function applicationsRouter({ db, logger, uploadDir, now }: ApplicationsRouterDeps): Router {
+export function applicationsRouter({ db, logger, config, uploadDir, now }: ApplicationsRouterDeps): Router {
   // Multipart only; multer passes JSON requests straight through. Files are
   // stored under a random name: the client's file name is never used on disk.
   const upload = multer({
@@ -135,6 +139,18 @@ export function applicationsRouter({ db, logger, uploadDir, now }: ApplicationsR
     logger.info(
       { application_id: app.id, fields: Object.keys(fields), document_types: docs?.map((d) => d.type), status: app.status },
       'application updated',
+    );
+    res.json(toDetailDto(getApplicationDetail(db, app.id)!, now()));
+  });
+
+  // Operator decision on an open review task. 409 with a readable message when
+  // a guard blocks it (e.g. approval before all checks pass) or the state forbids it.
+  router.post('/:id/review', (req, res) => {
+    const body = ReviewRequestSchema.parse(req.body);
+    const app = resolveReview(db, config, req.params.id, body, now());
+    logger.info(
+      { application_id: app.id, task_id: body.taskId, resolution: body.resolution, status: app.status },
+      'review task resolved',
     );
     res.json(toDetailDto(getApplicationDetail(db, app.id)!, now()));
   });

@@ -2,7 +2,9 @@ import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
 import type { Logger } from './logger.js';
+import { createSimulatedMerchantService, type SimulatedMerchantService } from './merchant/service.js';
 import { errorHandler, notFoundHandler } from './http/errorHandler.js';
+import { adminRouter } from './http/routes/admin.js';
 import { applicationsRouter } from './http/routes/applications.js';
 import { webhooksRouter } from './http/routes/webhooks.js';
 
@@ -12,6 +14,11 @@ export interface AppDeps {
   db: Db;
   /** Injectable clock (epoch ms) for deterministic tests. */
   now?: () => number;
+  /**
+   * Simulated merchant ID service whose failure flag POST /admin/merchant-service
+   * toggles. Pass the same instance to createJobHandlers so the worker sees it.
+   */
+  merchantService?: SimulatedMerchantService;
   /** Hook for tests / later phases to mount extra routers before the 404 handler. */
   mount?: (app: Express) => void;
 }
@@ -19,6 +26,7 @@ export interface AppDeps {
 export function createApp(deps: AppDeps): Express {
   const { logger, db, config } = deps;
   const now = deps.now ?? Date.now;
+  const merchantService = deps.merchantService ?? createSimulatedMerchantService(db);
   const app = express();
 
   // Request log: method, path, status, duration. Never the body.
@@ -40,7 +48,9 @@ export function createApp(deps: AppDeps): Express {
     res.json({ status: 'ok', service: 'api' });
   });
 
-  app.use('/applications', applicationsRouter({ db, logger, uploadDir: config.uploadDir, now }));
+  app.use('/applications', applicationsRouter({ db, logger, config, uploadDir: config.uploadDir, now }));
+
+  app.use('/admin', adminRouter({ merchantService, logger }));
 
   deps.mount?.(app);
 
