@@ -89,12 +89,12 @@ describe('POST /jobs/:id/requeue', () => {
     ]);
 
     clock += 5_000;
-    const res = await request(app).post(`/jobs/${job.id}/requeue`).expect(200);
+    const res = await request(app).post(`/jobs/${job.id}/requeue`).send({ note: 'provider back up' }).expect(200);
     expect(DeadJobDtoSchema.parse(res.body)).toMatchObject({ id: job.id, status: 'queued', attempts: 0, run_at: new Date(clock).toISOString() });
     expect(jobRow(job.id)).toMatchObject({ status: 'queued', attempts: 0, runAt: clock });
 
     const tasks = tasksOf(db);
-    expect(tasks[0]).toMatchObject({ status: 'RESOLVED', resolution: 'REQUEUED' });
+    expect(tasks[0]).toMatchObject({ status: 'RESOLVED', resolution: 'REQUEUED', resolutionNote: 'provider back up' });
     expect(tasks[1]).toMatchObject({ status: 'OPEN' });
     expect(tasks[1]!.note).toContain(`#${other.id}`);
 
@@ -103,7 +103,7 @@ describe('POST /jobs/:id/requeue', () => {
       event: 'JOB_REQUEUED',
       toState: null,
       fromState: 'VERIFYING',
-      detail: { job_id: job.id, type: 'start_verifications', previous_attempts: 2 },
+      detail: { job_id: job.id, type: 'start_verifications', previous_attempts: 2, note: 'provider back up' },
     });
     expect(JSON.stringify(auditOf(db).at(-1))).not.toContain(RAW_PAN);
     expect(appRow(db).status).toBe('VERIFYING');
@@ -120,7 +120,7 @@ describe('POST /jobs/:id/requeue', () => {
   it('a requeued job gets its full retry budget again', async () => {
     verifyingApp(db);
     const job = await deadJob(2);
-    await request(app).post(`/jobs/${job.id}/requeue`).expect(200);
+    await request(app).post(`/jobs/${job.id}/requeue`).send({ note: 'provider back up' }).expect(200);
     clock += 1;
     await runDueJobsOnce(worker, clock); // fails: attempt 1 of 2, retried, not dead
     expect(jobRow(job.id)).toMatchObject({ status: 'queued', attempts: 1 });
@@ -128,15 +128,27 @@ describe('POST /jobs/:id/requeue', () => {
 
   it('a job without an application is requeued without audit or task changes', async () => {
     const job = await deadJob(1, { note: 'orphan' });
-    await request(app).post(`/jobs/${job.id}/requeue`).expect(200);
+    await request(app).post(`/jobs/${job.id}/requeue`).send({ note: 'provider back up' }).expect(200);
     expect(jobRow(job.id).status).toBe('queued');
   });
 
   it('409 for a job that is not dead, 404 for an unknown job, 400 for a bad id', async () => {
     const queued = enqueueJob(db, 'approve', { application_id: 'app-1' }, { now: clock });
-    const conflict = await request(app).post(`/jobs/${queued.id}/requeue`).expect(409);
+    const conflict = await request(app).post(`/jobs/${queued.id}/requeue`).send({ note: 'try again' }).expect(409);
     expect(conflict.body.error.message).toContain('only dead jobs can be requeued');
-    await request(app).post('/jobs/9999/requeue').expect(404);
-    await request(app).post('/jobs/abc/requeue').expect(400);
+    await request(app).post('/jobs/9999/requeue').send({ note: 'try again' }).expect(404);
+    await request(app).post('/jobs/abc/requeue').send({ note: 'try again' }).expect(400);
+  });
+
+  it('requires an operator note (400 without, job stays dead); a PAN in the note is masked', async () => {
+    verifyingApp(db);
+    const job = await deadJob();
+    const res = await request(app).post(`/jobs/${job.id}/requeue`).send({}).expect(400);
+    expect(JSON.stringify(res.body)).toContain('Note is required');
+    await request(app).post(`/jobs/${job.id}/requeue`).send({ note: 'ok' }).expect(400);
+    expect(jobRow(job.id).status).toBe('dead');
+
+    await request(app).post(`/jobs/${job.id}/requeue`).send({ note: `retry for ${RAW_PAN}` }).expect(200);
+    expect(JSON.stringify(auditOf(db))).not.toContain(RAW_PAN);
   });
 });

@@ -1,14 +1,16 @@
-import type { DeadJobDto, DeadJobListDto } from '@app/shared'
+import { REVIEW_NOTE_MIN, type DeadJobDto, type DeadJobListDto } from '@app/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link } from 'react-router'
-import { Card, ErrorBox, Loading, buttonClass } from '../components/ui.tsx'
+import { Card, ErrorBox, Loading, buttonClass, inputClass } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 import { dateTime } from '../lib/format.ts'
 
 /**
  * Dead-letter view: jobs that exhausted their retries (or had no handler).
- * Payloads arrive masked from the API. Requeue resets attempts and makes the
- * job due now; the worker picks it up on its next tick.
+ * Payloads arrive masked from the API. Requeue (with a required note, like
+ * every operator action) resets attempts and makes the job due now; the
+ * worker picks it up on its next tick.
  */
 export function DeadLetters() {
   const { data, error, isPending } = useQuery({
@@ -46,10 +48,12 @@ export function DeadLetters() {
 
 function DeadJobRow({ job }: { job: DeadJobDto }) {
   const qc = useQueryClient()
+  const [note, setNote] = useState('')
   const requeue = useMutation({
-    mutationFn: () => api.post(`/jobs/${job.id}/requeue`),
+    mutationFn: () => api.post(`/jobs/${job.id}/requeue`, { note }),
     onSuccess: () => qc.invalidateQueries(),
   })
+  const noteOk = note.trim().length >= REVIEW_NOTE_MIN
   return (
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2">
@@ -72,8 +76,14 @@ function DeadJobRow({ job }: { job: DeadJobDto }) {
       </td>
       <td className="max-w-xs break-words text-xs text-red-700">{job.last_error ?? '—'}</td>
       <td className="text-xs text-slate-500">{dateTime(job.updated_at)}</td>
-      <td className="text-right">
-        <button type="button" className={buttonClass.primary} disabled={requeue.isPending} onClick={() => requeue.mutate()}>
+      <td className="min-w-48 space-y-1 text-right">
+        <input
+          className={inputClass}
+          placeholder={`Note (min ${REVIEW_NOTE_MIN} chars)`}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <button type="button" className={buttonClass.primary} disabled={!noteOk || requeue.isPending} onClick={() => requeue.mutate()}>
           Requeue
         </button>
         <ErrorBox error={requeue.error} />

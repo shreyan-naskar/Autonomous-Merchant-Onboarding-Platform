@@ -54,14 +54,14 @@ export function resolutionsFor(status: ApplicationStatus, taskReason: string): R
 
 export const REVIEW_NOTE_MIN = 5;
 
+/** Every operator action carries a note (stored redacted, and in the audit detail). */
+const NOTE_REQUIRED = `Note is required (at least ${REVIEW_NOTE_MIN} characters)`;
+export const OperatorNoteSchema = z.string({ error: NOTE_REQUIRED }).trim().min(REVIEW_NOTE_MIN, NOTE_REQUIRED).max(2000);
+
 export const ReviewRequestSchema = z.strictObject({
   taskId: z.number().int().positive(),
   resolution: ReviewResolutionSchema,
-  note: z
-    .string()
-    .trim()
-    .min(REVIEW_NOTE_MIN, `Note is required (at least ${REVIEW_NOTE_MIN} characters)`)
-    .max(2000),
+  note: OperatorNoteSchema,
 });
 export type ReviewRequest = z.infer<typeof ReviewRequestSchema>;
 
@@ -71,3 +71,7 @@ export type MerchantServiceConfig = z.infer<typeof MerchantServiceConfigSchema>;
 
 /** Merchant IDs issued by the internal service: `MID-` + 8 uppercase alphanumerics. */
 export const MERCHANT_ID_RE = /^MID-[A-Z0-9]{8}$/;
+
+/** `POST /jobs/:id/requeue` (dead-letter view). */
+export const RequeueJobRequestSchema = z.strictObject({ note: OperatorNoteSchema });
+export type RequeueJobRequest = z.infer<typeof RequeueJobRequestSchema>;

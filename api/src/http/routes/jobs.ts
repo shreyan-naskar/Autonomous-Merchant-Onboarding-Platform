@@ -1,3 +1,4 @@
+import { RequeueJobRequestSchema } from '@app/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { Db } from '../../db/client.js';
@@ -15,7 +16,8 @@ const IdSchema = z.coerce.number().int().positive();
 /**
  * Dead-letter view (no auth, like the rest of the demo API):
  * - `GET /jobs?status=dead` dead jobs, newest first, payloads masked.
- * - `POST /jobs/:id/requeue` dead -> queued with attempts reset (409 if not dead).
+ * - `POST /jobs/:id/requeue {note}` dead -> queued with attempts reset (409 if
+ *   not dead). The note is required, like every operator action.
  */
 export function jobsRouter({ db, logger, now }: { db: Db; logger: Logger; now: () => number }): Router {
   const router = Router();
@@ -25,7 +27,9 @@ export function jobsRouter({ db, logger, now }: { db: Db; logger: Logger; now: (
     res.json({ items, count: items.length });
   });
   router.post('/:id/requeue', (req, res) => {
-    const job = requeueJob(db, IdSchema.parse(req.params.id), { now: now() });
+    const id = IdSchema.parse(req.params.id);
+    const { note } = RequeueJobRequestSchema.parse(req.body ?? {});
+    const job = requeueJob(db, id, { now: now(), note });
     logger.info({ job_id: job.id, type: job.type }, 'dead job requeued');
     res.json(toDeadJobDto(job));
   });

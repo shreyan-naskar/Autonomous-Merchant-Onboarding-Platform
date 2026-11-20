@@ -1,3 +1,4 @@
+import { redactText } from '@app/shared';
 import { and, desc, eq, like } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { applications, auditLog, jobs, reviewTasks } from '../db/schema.js';
@@ -22,13 +23,14 @@ const applicationIdOf = (job: JobRow) => {
 /**
  * Put a dead job back in the queue: status queued, attempts reset to 0,
  * due now. last_error is kept until the next attempt overwrites it. If the
- * job belongs to an application, writes audit JOB_REQUEUED (actor operator)
- * and resolves the open JOB_DEAD task the worker opened for this job
- * (resolution REQUEUED). One transaction.
+ * job belongs to an application, writes audit JOB_REQUEUED (actor operator,
+ * with the operator's note) and resolves the open JOB_DEAD task the worker
+ * opened for this job (resolution REQUEUED, same note). One transaction.
  *
  * @throws NotFoundError (no such job), ConflictError (job is not dead).
  */
-export function requeueJob(db: Db, jobId: number, { now }: { now: number }): JobRow {
+export function requeueJob(db: Db, jobId: number, { now, note: rawNote }: { now: number; note: string }): JobRow {
+  const note = redactText(rawNote);
   return db.transaction(
     (tx) => {
       const job = tx.select().from(jobs).where(eq(jobs.id, jobId)).get();
@@ -53,12 +55,12 @@ export function requeueJob(db: Db, jobId: number, { now }: { now: number }): Job
             fromState: app.status,
             toState: null,
             event: 'JOB_REQUEUED',
-            detail: { job_id: job.id, type: job.type, previous_attempts: job.attempts, last_error: job.lastError },
+            detail: { job_id: job.id, type: job.type, previous_attempts: job.attempts, last_error: job.lastError, note },
           })
           .run();
         // The worker's JOB_DEAD note starts "Job <type> #<id> failed".
         tx.update(reviewTasks)
-          .set({ status: 'RESOLVED', resolution: 'REQUEUED', resolutionNote: 'Job requeued from the dead-letter view', resolvedAt: now })
+          .set({ status: 'RESOLVED', resolution: 'REQUEUED', resolutionNote: note, resolvedAt: now })
           .where(
             and(
               eq(reviewTasks.applicationId, appId),
