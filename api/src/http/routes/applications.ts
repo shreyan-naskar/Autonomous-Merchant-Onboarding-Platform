@@ -125,9 +125,17 @@ export function applicationsRouter({ db, logger, uploadDir, now }: ApplicationsR
   });
 
   router.patch('/:id', (req, res) => {
-    const patch = UpdateApplicationSchema.parse(req.body);
-    const app = updateApplication(db, req.params.id, toInput(patch), { now: now() });
-    logger.info({ application_id: app.id, fields: Object.keys(patch) }, 'application updated');
+    const { documents: docs, ...fields } = UpdateApplicationSchema.parse(req.body);
+    const app = updateApplication(
+      db,
+      req.params.id,
+      { ...toInput(fields), documents: docs?.map((d) => ({ type: d.type, payload: d.payload })) },
+      { now: now() },
+    );
+    logger.info(
+      { application_id: app.id, fields: Object.keys(fields), document_types: docs?.map((d) => d.type), status: app.status },
+      'application updated',
+    );
     res.json(toDetailDto(getApplicationDetail(db, app.id)!, now()));
   });
 

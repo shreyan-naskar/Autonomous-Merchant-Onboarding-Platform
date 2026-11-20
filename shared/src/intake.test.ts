@@ -75,4 +75,12 @@ describe('UpdateApplicationSchema', () => {
     expect(UpdateApplicationSchema.safeParse({}).success).toBe(false);
     expect(UpdateApplicationSchema.parse({ bank_account: '987654321' })).toEqual({ bank_account: '987654321' });
   });
+
+  it('accepts structured documents alone, but not an empty list alone', () => {
+    const doc = { type: 'GST_CERT', payload: { gstin: '27AABCL1234K1Z5', legal_name: 'Acme' } };
+    expect(UpdateApplicationSchema.parse({ documents: [doc] })).toEqual({ documents: [doc] });
+    expect(UpdateApplicationSchema.safeParse({ documents: [] }).success).toBe(false);
+    expect(UpdateApplicationSchema.safeParse({ documents: [doc, doc] }).success).toBe(false);
+    expect(UpdateApplicationSchema.safeParse({ documents: [{ type: 'PASSPORT', payload: {} }] }).success).toBe(false);
+  });
 });

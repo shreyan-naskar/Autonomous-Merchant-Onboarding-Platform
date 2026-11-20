@@ -97,11 +97,17 @@ export const CreateApplicationMultipartFieldsSchema = ApplicationFieldsSchema.ex
   documents: jsonText.pipe(StructuredDocumentListSchema).optional(),
 });
 
-/** PATCH /applications/:id. Any subset of the form fields, at least one. */
-export const UpdateApplicationSchema = ApplicationFieldsSchema.partial().refine(
-  (v) => Object.values(v).some((x) => x !== undefined),
-  'Provide at least one field to update',
-);
+/**
+ * PATCH /applications/:id. Any subset of the form fields and/or structured
+ * documents (documents are only accepted while the application is in
+ * NEEDS_INFO; each replaces the existing document of the same type).
+ */
+export const UpdateApplicationSchema = ApplicationFieldsSchema.partial()
+  .extend({ documents: StructuredDocumentListSchema.optional() })
+  .refine(
+    (v) => Object.entries(v).some(([k, x]) => x !== undefined && !(k === 'documents' && (x as unknown[]).length === 0)),
+    'Provide at least one field to update',
+  );
 export type UpdateApplication = z.infer<typeof UpdateApplicationSchema>;
 
 export const ListApplicationsQuerySchema = z.strictObject({

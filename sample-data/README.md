@@ -25,8 +25,20 @@ set them in a copy of `happy.json` to try them):
 | PAN `ZZZZZ9999Z` (GSTIN must then embed it, e.g. `27ZZZZZ9999Z1Z5`) | PAN verification fails |
 | Bank account ending `0000` | bank verification times out (no callback) |
 
-Paths after `SUBMITTED` need the worker (Phase 3) and mock providers
-(Phase 4); until then every file stops at `SUBMITTED` with a queued `extract` job.
+The API's in-process worker runs extraction (Phase 3): `happy.json` and
+`gst-fail.json` reach `VERIFYING`, `conflict.json` lands in `IN_REVIEW`,
+`missing.json` in `NEEDS_INFO`. Paths beyond `VERIFYING` need the mock
+providers (Phase 4).
+
+To complete `missing.json`, PATCH the missing document (documents are only
+accepted while the application is in `NEEDS_INFO`):
+
+```sh
+curl -X PATCH localhost:3000/applications/<id> -H 'content-type: application/json' \
+  -d '{"documents":[{"type":"GST_CERT","payload":{"gstin":"33AAECS3456R1Z1","legal_name":"Sunrise Bakery"}}]}'
+```
+
+It moves `NEEDS_INFO -> EXTRACTING`, is re-extracted, and reaches `VERIFYING`.
 
 ## Multipart
 

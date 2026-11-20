@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { ApplicationStatus, DocumentType } from '@app/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { applications, auditLog, documents, type Application } from '../db/schema.js';
 import { ConflictError, NotFoundError } from '../errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import type { Tx } from './guards.js';
+import { transition } from './transition.js';
 
 export interface NewApplicationInput {
   merchantName: string;
@@ -109,15 +110,27 @@ const WIRE_NAMES: Record<string, string> = { merchantName: 'merchant_name', bank
 /** States in which the merchant can no longer edit the application. */
 const LOCKED_STATES: readonly ApplicationStatus[] = ['APPROVED', 'MERCHANT_CREATED', 'MERCHANT_CREATION_FAILED', 'REJECTED'];
 
+export interface ApplicationPatch extends Partial<NewApplicationInput> {
+  /** Structured documents; each replaces the existing document of its type. NEEDS_INFO only. */
+  documents?: NewDocumentInput[];
+}
+
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
 /**
- * Merchant edits to form fields. Persists the changed fields and writes an
- * APPLICATION_UPDATED audit row naming the fields (never their values).
- * Status is untouched: bank-change re-verification is Phase 5.
+ * Merchant edits: form fields, plus documents while in NEEDS_INFO.
+ *
+ * - In NEEDS_INFO, any real change is the merchant supplying the requested
+ *   info: NEEDS_INFO -> EXTRACTING (actor merchant, event INFO_SUPPLIED) and
+ *   a new `extract` job, in the same transaction as the edit.
+ * - Elsewhere, persists the fields and writes APPLICATION_UPDATED; status is
+ *   untouched (bank-change re-verification is Phase 5).
+ * Audit details name the changed fields / document types, never values.
  */
 export function updateApplication(
   db: Db,
   id: string,
-  patch: NewApplicationInput | Partial<NewApplicationInput>,
+  patch: ApplicationPatch,
   { now = Date.now() }: { now?: number } = {},
 ): Application {
   return db.transaction(
@@ -127,6 +140,10 @@ export function updateApplication(
       if (LOCKED_STATES.includes(app.status)) {
         throw new ConflictError(`Application cannot be edited in ${app.status}`, { status: app.status });
       }
+      const docs = patch.documents ?? [];
+      if (docs.length > 0 && app.status !== 'NEEDS_INFO') {
+        throw new ConflictError('Documents can only be added while the application needs info', { status: app.status });
+      }
 
       const changes: Partial<Record<'merchantName' | 'pan' | 'gst' | 'bankAccount' | 'ifsc', string>> = {};
       for (const key of ['merchantName', 'pan', 'gst', 'bankAccount', 'ifsc'] as const) {
@@ -134,14 +151,48 @@ export function updateApplication(
         if (value !== undefined && value !== null && value !== app[key]) changes[key] = value;
       }
       const changed = Object.keys(changes).map((k) => WIRE_NAMES[k] ?? k);
-      if (changed.length === 0) return app;
 
-      const updated = tx
+      const changedDocs: DocumentType[] = [];
+      for (const doc of docs) {
+        const existing = tx
+          .select()
+          .from(documents)
+          .where(and(eq(documents.applicationId, id), eq(documents.type, doc.type)))
+          .get();
+        if (existing && sameJson(existing.payload, doc.payload) && (existing.path ?? null) === (doc.path ?? null)) continue;
+        if (existing) {
+          tx.update(documents)
+            .set({ payload: doc.payload ?? null, path: doc.path ?? null, blurScore: null, createdAt: now })
+            .where(eq(documents.id, existing.id))
+            .run();
+        } else {
+          tx.insert(documents)
+            .values({ applicationId: id, type: doc.type, payload: doc.payload ?? null, path: doc.path ?? null, createdAt: now })
+            .run();
+        }
+        changedDocs.push(doc.type);
+      }
+
+      if (changed.length === 0 && changedDocs.length === 0) return app;
+
+      let updated = tx
         .update(applications)
         .set({ ...changes, updatedAt: now })
         .where(eq(applications.id, id))
         .returning()
         .get();
+
+      if (app.status === 'NEEDS_INFO') {
+        updated = transition(tx, id, 'EXTRACTING', {
+          actor: 'merchant',
+          event: 'INFO_SUPPLIED',
+          detail: { fields: changed, documents: changedDocs },
+          now,
+        });
+        enqueueJob(tx, 'extract', { application_id: id }, { now });
+        return updated;
+      }
+
       tx.insert(auditLog)
         .values({
           applicationId: id,
