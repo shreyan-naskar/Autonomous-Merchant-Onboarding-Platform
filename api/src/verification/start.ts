@@ -6,6 +6,7 @@ import { applications, auditLog, verifications, type Application, type Verificat
 import { enqueueJob } from '../jobs/queue.js';
 import type { Logger } from '../logger.js';
 import { buildProviderRequest, type ProviderClient } from '../providers/client.js';
+import { applyEarlyCallbacks } from './callback.js';
 import { currentVerification } from './latest.js';
 
 export interface VerificationDeps {
@@ -70,7 +71,8 @@ function reserveRows(db: Db, appId: string, kinds: readonly VerificationKind[], 
 
 /**
  * Record an accepted request: store the request_id, schedule the
- * verification_timeout job and audit VERIFICATION_REQUESTED, atomically.
+ * verification_timeout job and audit VERIFICATION_REQUESTED, atomically,
+ * then apply any callback for this request that arrived before the id was known.
  */
 function recordRequested(deps: VerificationDeps, app: Application, row: Verification, requestId: string): Verification {
   const { db, config, now } = deps;
@@ -102,6 +104,8 @@ function recordRequested(deps: VerificationDeps, app: Application, row: Verifica
           detail: { kind: row.kind, attempt: row.attempt, request_id: requestId, bank_version: row.bankVersion },
         })
         .run();
+      // A fast provider may have called back before we stored the id.
+      applyEarlyCallbacks(tx, requestId, now);
       return updated;
     },
     { behavior: 'immediate' },
