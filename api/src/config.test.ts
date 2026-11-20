@@ -10,7 +10,7 @@ describe('loadConfig', () => {
     expect(c.webhookUrl).toBe('http://localhost:3000/webhooks/provider');
     expect(c.hmacSecret.length).toBeGreaterThan(0);
     expect(c.demoMode).toBe(true);
-    expect(c.thresholds).toEqual({ confidence: 0.8, risk: 70 });
+    expect(c.thresholds).toEqual({ confidence: 0.8, risk: 70, nameMatch: 0.85 });
   });
 
   it('uses short timings in demo mode and longer ones otherwise', () => {
@@ -32,6 +32,7 @@ describe('loadConfig', () => {
       HMAC_SECRET: 's3cret',
       CONFIDENCE_THRESHOLD: '0.9',
       RISK_THRESHOLD: '60',
+      NAME_MATCH_THRESHOLD: '0.7',
     });
     expect(c).toMatchObject({
       port: 3100,
@@ -39,7 +40,7 @@ describe('loadConfig', () => {
       webhookUrl: 'http://api:3000/webhooks/provider',
       mockProviderUrl: 'http://mock:4000',
       hmacSecret: 's3cret',
-      thresholds: { confidence: 0.9, risk: 60 },
+      thresholds: { confidence: 0.9, risk: 60, nameMatch: 0.7 },
     });
   });
 

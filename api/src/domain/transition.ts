@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { applications, auditLog, type Application } from '../db/schema.js';
 import { IllegalTransitionError, NotFoundError } from '../errors.js';
-import { GUARDS } from './guards.js';
+import { GUARDS, type Tx } from './guards.js';
 
 export interface TransitionContext {
   actor: Actor;
@@ -18,9 +18,13 @@ export interface TransitionContext {
  * check ALLOWED_TRANSITIONS, run the target state's guard, update status and
  * state_entered_at, and append an audit_log row. Any throw rolls back all of it.
  *
+ * Pass a transaction (`tx`) to make the move part of a larger unit of work
+ * (e.g. extraction results + transition + review task + next job): it then
+ * runs as a savepoint and commits or rolls back with the caller.
+ *
  * @throws NotFoundError, IllegalTransitionError, GuardError
  */
-export function transition(db: Db, appId: string, to: ApplicationStatus, ctx: TransitionContext): Application {
+export function transition(db: Db | Tx, appId: string, to: ApplicationStatus, ctx: TransitionContext): Application {
   const now = ctx.now ?? Date.now();
   return db.transaction(
     (tx) => {

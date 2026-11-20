@@ -270,3 +270,25 @@ describe('a full walk', () => {
     for (let i = 1; i < audit.length; i++) expect(audit[i].fromState).toBe(audit[i - 1].toState);
   });
 });
+
+describe('transition() inside a caller transaction', () => {
+  it('commits with the caller', () => {
+    const id = seedApp('SUBMITTED');
+    db.transaction((tx) => {
+      transition(tx, id, 'EXTRACTING', { actor: 'system', event: 'EXTRACTION_STARTED', now: T0 + 1 });
+    });
+    expect(db.select().from(applications).where(eq(applications.id, id)).get()!.status).toBe('EXTRACTING');
+  });
+
+  it('rolls back status and audit row when the caller throws afterwards', () => {
+    const id = seedApp('SUBMITTED');
+    expect(() =>
+      db.transaction((tx) => {
+        transition(tx, id, 'EXTRACTING', { actor: 'system', event: 'EXTRACTION_STARTED', now: T0 + 1 });
+        throw new Error('later step failed');
+      }),
+    ).toThrow('later step failed');
+    expect(db.select().from(applications).where(eq(applications.id, id)).get()!.status).toBe('SUBMITTED');
+    expect(db.select().from(auditLog).where(eq(auditLog.applicationId, id)).all()).toHaveLength(0);
+  });
+});

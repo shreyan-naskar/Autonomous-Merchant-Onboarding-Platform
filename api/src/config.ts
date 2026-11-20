@@ -14,6 +14,8 @@ const EnvSchema = z.object({
   DEMO_MODE: z.stringbool().default(true),
   CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.8),
   RISK_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
+  // Minimum normalized name similarity (0-1) between form and document names.
+  NAME_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
@@ -60,6 +62,7 @@ export function loadConfig(env: Env = process.env) {
     thresholds: {
       confidence: e.CONFIDENCE_THRESHOLD,
       risk: e.RISK_THRESHOLD,
+      nameMatch: e.NAME_MATCH_THRESHOLD,
     },
     timings: {
       // How long a provider request may stay PENDING before it is TIMED_OUT.
