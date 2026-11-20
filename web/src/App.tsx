@@ -1,8 +1,12 @@
 import { NavLink, Route, Routes } from 'react-router'
 import { ApplicationDetail } from './pages/ApplicationDetail.tsx'
 import { ApplicationList } from './pages/ApplicationList.tsx'
+import { ReviewQueue } from './pages/ReviewQueue.tsx'
 
-const NAV = [{ to: '/', label: 'Applications' }]
+const NAV = [
+  { to: '/', label: 'Applications' },
+  { to: '/review', label: 'Review queue' },
+]
 
 export default function App() {
   return (
@@ -28,6 +32,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ApplicationList />} />
           <Route path="/applications/:id" element={<ApplicationDetail />} />
+          <Route path="/review" element={<ReviewQueue />} />
         </Routes>
       </main>
     </div>

@@ -7,8 +7,9 @@ import {
   type ApplicationDetailDto,
   type ApplicationSummaryDto,
   type DocumentType,
+  type ReviewQueueItemDto,
 } from '@app/shared';
-import type { ApplicationDetailRows, ApplicationListRow } from '../domain/queries.js';
+import type { ApplicationDetailRows, ApplicationListRow, ReviewQueueRow } from '../domain/queries.js';
 
 /*
  * The response-mapping layer. Every application-related response body is
@@ -71,16 +72,7 @@ export function toDetailDto(rows: ApplicationDetailRows, now: number): Applicati
       requested_at: iso(v.requestedAt),
       completed_at: isoOrNull(v.completedAt),
     })),
-    review_tasks: rows.reviewTasks.map((t) => ({
-      id: t.id,
-      reason: t.reason,
-      status: t.status,
-      resolution: t.resolution,
-      note: t.note === null ? null : redactText(t.note),
-      resolution_note: t.resolutionNote === null ? null : redactText(t.resolutionNote),
-      created_at: iso(t.createdAt),
-      resolved_at: isoOrNull(t.resolvedAt),
-    })),
+    review_tasks: rows.reviewTasks.map(toTaskDto),
     // Payloads are not exposed; only what the UI needs for late/duplicate markers.
     callbacks: rows.callbacks.map((c) => ({
       id: c.id,
@@ -102,4 +94,23 @@ export function toDetailDto(rows: ApplicationDetailRows, now: number): Applicati
       detail: maskDeep(a.detail ?? null),
     })),
   };
+}
+
+type TaskRow = ApplicationDetailRows['reviewTasks'][number];
+
+function toTaskDto(t: TaskRow) {
+  return {
+    id: t.id,
+    reason: t.reason,
+    status: t.status,
+    resolution: t.resolution,
+    note: t.note === null ? null : redactText(t.note),
+    resolution_note: t.resolutionNote === null ? null : redactText(t.resolutionNote),
+    created_at: iso(t.createdAt),
+    resolved_at: isoOrNull(t.resolvedAt),
+  };
+}
+
+export function toReviewQueueItemDto(row: ReviewQueueRow): ReviewQueueItemDto {
+  return { ...toTaskDto(row), application_id: row.applicationId, merchant_name: row.merchantName, application_status: row.applicationStatus };
 }

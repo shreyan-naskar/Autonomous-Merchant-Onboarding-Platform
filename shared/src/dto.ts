@@ -89,6 +89,16 @@ export const ReviewTaskDtoSchema = z.object({
   resolved_at: iso.nullable(),
 });
 
+/** Review queue row: a task plus enough of its application to act on it. */
+export const ReviewQueueItemDtoSchema = ReviewTaskDtoSchema.extend({
+  application_id: z.string(),
+  merchant_name: z.string(),
+  application_status: ApplicationStatusSchema,
+});
+export type ReviewQueueItemDto = z.infer<typeof ReviewQueueItemDtoSchema>;
+export const ReviewQueueDtoSchema = z.object({ items: z.array(ReviewQueueItemDtoSchema), count: z.number().int() });
+export type ReviewQueueDto = z.infer<typeof ReviewQueueDtoSchema>;
+
 /** Provider callbacks received for the application (duplicates included). No payload. */
 export const CallbackEventDtoSchema = z.object({
   id: z.number().int(),

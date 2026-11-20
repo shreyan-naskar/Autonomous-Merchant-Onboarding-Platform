@@ -49,6 +49,27 @@ export function listApplications(
   return q.all().map((r) => ({ ...r.app, openReviewCount: r.openReviewCount }));
 }
 
+export type ReviewQueueRow = typeof reviewTasks.$inferSelect & {
+  merchantName: string;
+  applicationStatus: ApplicationStatus;
+};
+
+/** Review tasks with their application's name and status; oldest first (a queue). */
+export function listReviewTasks(
+  db: Db,
+  { status = 'OPEN', limit = 200 }: { status?: 'OPEN' | 'RESOLVED'; limit?: number } = {},
+): ReviewQueueRow[] {
+  return db
+    .select({ task: reviewTasks, merchantName: applications.merchantName, applicationStatus: applications.status })
+    .from(reviewTasks)
+    .innerJoin(applications, eq(applications.id, reviewTasks.applicationId))
+    .where(eq(reviewTasks.status, status))
+    .orderBy(status === 'OPEN' ? asc(reviewTasks.id) : desc(reviewTasks.id))
+    .limit(limit)
+    .all()
+    .map((r) => ({ ...r.task, merchantName: r.merchantName, applicationStatus: r.applicationStatus }));
+}
+
 export function getApplicationDetail(db: Db, id: string): ApplicationDetailRows | undefined {
   const row = db
     .select({ app: applications, openReviewCount })

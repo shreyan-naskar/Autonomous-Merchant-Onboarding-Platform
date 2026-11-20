@@ -374,4 +374,28 @@ describe('POST /applications/:id/review', () => {
     expect((await api().post('/admin/merchant-service').send({ fail: 'yes' })).status).toBe(400);
     expect((await api().post('/admin/merchant-service').send({})).status).toBe(400);
   });
+
+  it('GET /review-tasks lists open tasks with their application, oldest first', async () => {
+    const { id, task } = await highRiskTask();
+    let res = await api().get('/review-tasks');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      count: 1,
+      items: [
+        expect.objectContaining({
+          id: task.id,
+          reason: 'HIGH_RISK',
+          status: 'OPEN',
+          application_id: id,
+          merchant_name: 'Risky Ventures Pvt Ltd',
+          application_status: 'IN_REVIEW',
+        }),
+      ],
+    });
+    await review(id, task.id, 'REJECT', 'not for us').expect(200);
+    expect((await api().get('/review-tasks')).body.count).toBe(0);
+    res = await api().get('/review-tasks?status=RESOLVED');
+    expect(res.body.items).toMatchObject([{ id: task.id, resolution: 'REJECT', resolution_note: 'not for us', application_status: 'REJECTED' }]);
+    expect((await api().get('/review-tasks?status=BOGUS')).status).toBe(400);
+  });
 });

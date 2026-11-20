@@ -110,6 +110,11 @@ export const UpdateApplicationSchema = ApplicationFieldsSchema.partial()
   );
 export type UpdateApplication = z.infer<typeof UpdateApplicationSchema>;
 
+export const ListReviewTasksQuerySchema = z.strictObject({
+  status: z.enum(['OPEN', 'RESOLVED']).default('OPEN'),
+  limit: z.coerce.number().int().min(1).max(500).default(200),
+});
+
 export const ListApplicationsQuerySchema = z.strictObject({
   status: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
