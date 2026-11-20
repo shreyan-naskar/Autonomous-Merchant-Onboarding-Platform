@@ -1,24 +1,12 @@
-import express from 'express';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { createMockApp } from './app.js';
 
-const app = express();
-const PORT = 4000;
+const rootEnv = fileURLToPath(new URL('../../.env', import.meta.url));
+if (existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
-app.use(express.json());
+const PORT = Number(process.env.MOCK_PROVIDERS_PORT ?? 4000);
 
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'mock-providers'
-  });
-});
-
-app.get('/api/pan/verify', (_req, res) => {
-  res.json({
-    verified: true,
-    provider: 'mock-pan'
-  });
-});
-
-app.listen(PORT, () => {
+createMockApp().listen(PORT, () => {
   console.log(`Mock providers running at http://localhost:${PORT}`);
 });
