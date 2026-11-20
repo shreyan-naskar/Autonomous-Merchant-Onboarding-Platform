@@ -14,8 +14,8 @@ from these two files alone.
 | 2. Intake API | DONE | POST/GET/PATCH /applications, masking layer, sample-data |
 | 3. Worker + extraction | DONE | worker, validators, extract job, decision, NEEDS_INFO re-entry |
 | 4. Mock providers + callbacks | DONE | signed async callbacks, idempotent webhook, evaluate, timeouts/retries, late reconciliation |
-| 5. Approval, MID, bank change | NEXT | |
-| 6. UI | todo | |
+| 5. Approval, MID, bank change | DONE | approve job, review endpoint, create_merchant + MID service, bank change |
+| 6. UI | NEXT | |
 | 7. Stretch | todo | cut first if behind |
 | 8. Hardening, docs, demo | todo | |
 
@@ -205,6 +205,48 @@ These come from the kickoff prompt and override or refine PLAN.md:
 - Test helpers: `api/src/verification/testkit.ts` (in-memory env,
   `verifyingApp()`, row getters). End-to-end: `api/src/verification/flow.test.ts`
   (API + mock on random ports, `advance(ms)` runs jobs at their run_at).
+- Approval (Phase 5): `approve` job = `runApprove` in `api/src/approval/approve.ts`
+  (VERIFIED only; RISK `score <= RISK_THRESHOLD` -> APPROVED `AUTO_APPROVED`,
+  else / null score -> IN_REVIEW `HIGH_RISK` + task `HIGH_RISK`). Every move into
+  APPROVED calls `enqueueCreateMerchant(tx, ...)` (max_attempts =
+  `config.limits.merchantCreateMaxAttempts` = 3).
+- Merchant IDs: `api/src/merchant/service.ts` `MerchantService` interface +
+  `createSimulatedMerchantService(db, {fail?, generate?})`. Ledger table
+  `merchant_accounts` (MID PK, `application_id` UNIQUE = idempotency key), plus a
+  unique index on `applications.merchant_id`. `svc.fail` is the runtime flag;
+  `index.ts` passes ONE instance to both `createApp({merchantService})` and
+  `createJobHandlers({merchantService})`. `create_merchant` = `runCreateMerchant`
+  in `merchant/create.ts`: APPROVED only; reuses `applications.merchant_id` if
+  set; on failure throws while attempts remain (worker backoff, audit
+  `JOB_FAILED`), on the last attempt -> MERCHANT_CREATION_FAILED + task
+  `MERCHANT_CREATION_FAILED` and the job completes (no JOB_DEAD).
+- Review: `POST /applications/:id/review {taskId, resolution, note}` ->
+  `resolveReview` in `api/src/review/resolve.ts`, schemas in
+  `shared/src/review.ts`. Resolutions and the states they are allowed from:
+  APPROVE (VERIFIED, IN_REVIEW), REJECT / REQUEST_INFO / RETRY_VERIFICATION
+  (IN_REVIEW), RETRY_MERCHANT_CREATION (MERCHANT_CREATION_FAILED). Wrong state ->
+  409 `ILLEGAL_TRANSITION` "X is not possible while the application is S";
+  guard -> 409 `GUARD_FAILED` with per-check message; resolved task -> 409;
+  task of another app -> 404. Note is `redactText`ed, stored in
+  `review_tasks.resolution_note` and the transition's audit detail
+  `{task_id, task_reason, resolution, note}`. RETRY_VERIFICATION supersedes the
+  current rows of the non-PASSED kinds (all four if all passed) and enqueues
+  `start_verifications {kinds}`.
+- `POST /admin/merchant-service {fail: boolean}` / `GET` (api, no auth, demo only).
+- Bank change: `applyBankChange` in `domain/applications.ts`, triggered by a
+  `bank_account`/`ifsc` change in VERIFYING, VERIFIED or IN_REVIEW (decision 5).
+  Enqueues `start_verifications {kinds:['BANK'], bank_version}`; a payload with
+  `bank_version` may run in IN_REVIEW and is skipped if the version moved on.
+  VERIFIED path: IN_REVIEW (merchant `BANK_CHANGED`, task `BANK_CHANGED`) ->
+  VERIFYING (system `BANK_REVERIFICATION_STARTED`). When evaluate() reaches
+  VERIFIED it auto-resolves open `BANK_CHANGED` tasks (resolution
+  `AUTO_REVERIFIED`, audit `REVIEW_TASK_AUTO_RESOLVED`) and the approve job
+  auto-approves as usual.
+- Migration `0002_phase5_merchant`. New audit events `BANK_REVERIFICATION_STARTED`,
+  `REVIEW_TASK_AUTO_RESOLVED`. Sample `high-risk.json` (name contains RISKY).
+- Testkit additions: `seedVerification`, `verifiedApp(db, id, {riskScore})`.
+  Phase 5 end-to-end: `api/src/approval/flow.test.ts` (its `drain()` only runs
+  jobs due within 5s so the 30s verification timeouts never fire).
 - better-sqlite3 13.2 builds/loads on this Fedora machine with no extra system
   packages. npm 11 gates install scripts: `allowScripts` in root package.json
   approves better-sqlite3 and esbuild.
@@ -252,6 +294,18 @@ These come from the kickoff prompt and override or refine PLAN.md:
   real-time callbacks the order is usually request order (PAN, GST, ...), but
   if GST's failure beat PAN's pass the reason would read
   `PAN_PENDING_GST_FAILED`. The review task note lists every check.
+- Phase 5: the operator retry is a fifth resolution `RETRY_MERCHANT_CREATION`
+  (the four in the brief have no way out of MERCHANT_CREATION_FAILED).
+- Phase 5: after a bank change from VERIFIED, approval is automatic again once
+  BANK passes (the BANK_CHANGED task is informational and auto-resolved). While
+  re-verifying the app is in VERIFYING, so operator APPROVE gets 409
+  ILLEGAL_TRANSITION; the GuardError 409 shows up when the bank changes while
+  IN_REVIEW (e.g. HIGH_RISK), because then the app stays IN_REVIEW.
+- Phase 5: the bank change does not re-extract or re-compare the BANK_PROOF
+  document; the new account is only verified by the bank provider. Changing
+  `pan`/`gst` after verification is still a plain APPLICATION_UPDATED (no
+  re-verification). Both are known gaps.
+- Phase 5: the merchant failure flag is in memory (resets on API restart).
 - `jobs.status = 'failed'` is unused: failed attempts go back to `queued`
   until they become `dead`.
 - Known gap: a job left `running` by a process crash is never reclaimed.
@@ -435,3 +489,43 @@ callbacks are already handled as `STALE_CALLBACK`. For operator re-verify
 re-run first. Otherwise a TIMED_OUT attempt 3 is retried as attempt 4 and
 escalates on its first timeout.
 
+
+### Phase 5: Approval, merchant ID, bank change — DONE (2026-11-21)
+
+Done (commits 5.1-5.4):
+- Guard: already enforced since Phase 1; message now names each blocking check
+  (`Cannot approve: GST is failed; BANK is pending for bank version 2. ...`).
+  Matrix tests from VERIFIED and IN_REVIEW x {missing, failed, pending,
+  timed out, old bank_version, superseded}.
+- `approve` job, `create_merchant` job, simulated MID service with DB ledger,
+  admin failure flag, review endpoint, bank change.
+- End-to-end (mock in-process): happy -> MERCHANT_CREATED with `MID-XXXXXXXX`;
+  forced failure -> JOB_FAILED x2 (backoff 1s, 2s) -> MERCHANT_CREATION_FAILED
+  + task -> APPROVE refused 409 -> RETRY_MERCHANT_CREATION -> MERCHANT_CREATED;
+  bank change after VERIFIED -> APPROVE 409 while re-verifying -> BANK v2
+  passes -> task auto-resolved -> MERCHANT_CREATED; bank change in IN_REVIEW ->
+  GUARD_FAILED 409 (not started, then pending) -> passes -> operator approve;
+  old-version BANK callback STALE; high risk -> IN_REVIEW HIGH_RISK; review
+  validation, 404/409s, REJECT, REQUEST_INFO, RETRY_VERIFICATION (GST only).
+
+Bug found by tests: IN_REVIEW -> APPROVED is a legal edge, so
+RETRY_MERCHANT_CREATION on a HIGH_RISK task approved the app. Each resolution
+now has an explicit list of source states.
+
+Mutation checks: `<` instead of `<=` for risk fails 1; service not idempotent
+fails 2; no bank_version bump fails 3; no per-resolution source states fails
+2; no MERCHANT_CREATION_FAILED on the last attempt fails 2.
+
+Test results (`npm test`, three consecutive runs):
+```
+ Test Files  25 passed (25)
+      Tests  333 passed (333)
+```
+Checks: live API (:3999, scratch DB) + mock (:4999), real timers.
+happy.json -> MERCHANT_CREATED `MID-MZY6DMU5`; high-risk.json -> IN_REVIEW
+HIGH_RISK; PATCH bank -> bank_version 2, APPROVE -> 409 `Cannot approve: BANK
+is not started for bank version 2...`, then 200 after the callback; with
+`/admin/merchant-service {fail:true}`: AUTO_APPROVED, JOB_FAILED x2,
+MERCHANT_CREATION_FAILED; flag off + RETRY_MERCHANT_CREATION ->
+MERCHANT_CREATED. No raw PAN/account in either log. `npm run typecheck` clean;
+status-writer grep shows only `transition.ts` writing `applications.status`.
