@@ -105,6 +105,8 @@ export const callbackEvents = sqliteTable(
     // Not a foreign key: a callback may name an unknown application and must still be recorded.
     applicationId: text('application_id'),
     kind: text(),
+    // Provider request this event answers; lets an event that arrived before its request_id was stored be applied later.
+    requestId: text('request_id'),
     payload: text({ mode: 'json' }).notNull(),
     receivedAt: integer('received_at').notNull(),
     processed: integer({ mode: 'boolean' }).notNull().default(false),
@@ -117,6 +119,7 @@ export const callbackEvents = sqliteTable(
       .on(t.eventId)
       .where(sql`${t.isDuplicate} = 0`),
     index('callback_events_app_idx').on(t.applicationId),
+    index('callback_events_request_idx').on(t.requestId),
   ],
 );
 

@@ -4,6 +4,7 @@ import type { Db } from './db/client.js';
 import type { Logger } from './logger.js';
 import { errorHandler, notFoundHandler } from './http/errorHandler.js';
 import { applicationsRouter } from './http/routes/applications.js';
+import { webhooksRouter } from './http/routes/webhooks.js';
 
 export interface AppDeps {
   config: Config;
@@ -20,8 +21,6 @@ export function createApp(deps: AppDeps): Express {
   const now = deps.now ?? Date.now;
   const app = express();
 
-  app.use(express.json({ limit: '1mb' }));
-
   // Request log: method, path, status, duration. Never the body.
   app.use((req, res, next) => {
     const start = process.hrtime.bigint();
@@ -31,6 +30,11 @@ export function createApp(deps: AppDeps): Express {
     });
     next();
   });
+
+  // Before the JSON parser: the webhook signature is over the raw body.
+  app.use('/webhooks', webhooksRouter({ db, logger, hmacSecret: config.hmacSecret, now }));
+
+  app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', service: 'api' });
