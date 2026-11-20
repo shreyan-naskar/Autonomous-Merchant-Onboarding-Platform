@@ -4,13 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { OcrEngine } from './ocr.js';
 import { readUploadedDocuments, type ReadableDocument } from './read.js';
-import { fakeOcr } from './testkit.js';
+import { PDF_TEXT_CONFIDENCE } from './read.js';
+import { fakeOcr, textPdf } from './testkit.js';
 
 const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 const FILES: Record<string, Buffer> = {
   '/u/sharp.png': readFileSync(join(SAMPLE_DIR, 'pan-sharp.png')),
   '/u/blurry.png': readFileSync(join(SAMPLE_DIR, 'pan-blurry.png')),
   '/u/corrupt.jpg': Buffer.from('definitely not a jpeg'),
+  '/u/gst.pdf': readFileSync(join(SAMPLE_DIR, 'gst-cert.pdf')),
+  '/u/bank.PDF': readFileSync(join(SAMPLE_DIR, 'bank-proof.pdf')),
+  '/u/scanned.pdf': textPdf([]),
+  '/u/corrupt.pdf': Buffer.from('%PDF-1.4 truncated'),
 };
 const readFile = async (p: string) => {
   const f = FILES[p];
@@ -59,7 +64,7 @@ describe('readUploadedDocuments', () => {
 
   it('skips structured documents, non-image uploads and unknown types', async () => {
     const out = await readUploadedDocuments(
-      [doc(1, null, { payload: { pan: 'X' } }), doc(2, '/u/scan.pdf'), doc(3, '/u/sharp.png', { type: 'SELFIE' })],
+      [doc(1, null, { payload: { pan: 'X' } }), doc(2, '/u/notes.txt'), doc(3, '/u/sharp.png', { type: 'SELFIE' })],
       { ocr: fakeOcr(), blurThreshold: 30, readFile },
     );
     expect(out.size).toBe(0);
@@ -70,5 +75,35 @@ describe('readUploadedDocuments', () => {
     await expect(readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr, blurThreshold: 30, readFile })).rejects.toThrow(
       'model download failed',
     );
+  });
+});
+
+describe('readUploadedDocuments: PDFs (text layer)', () => {
+  const opts = () => ({ ocr: fakeOcr(), blurThreshold: 30, readFile });
+
+  it('GST certificate PDF: GSTIN and legal name at PDF_TEXT_CONFIDENCE, no OCR, no blur check', async () => {
+    const deps = opts();
+    const r = (await readUploadedDocuments([doc(1, '/u/gst.pdf', { type: 'GST_CERT' })], deps)).get(1)!;
+    expect(r).toEqual({
+      source: 'pdf',
+      payload: { gstin: '27AAFCS4321M1Z5', legal_name: 'Sunrise Traders Pvt Ltd' },
+      confidence: PDF_TEXT_CONFIDENCE,
+    });
+    expect(deps.ocr.calls).toBe(0);
+  });
+
+  it('bank proof PDF (upper-case extension): grouped account number, IFSC, holder', async () => {
+    const r = (await readUploadedDocuments([doc(1, '/u/bank.PDF', { type: 'BANK_PROOF' })], opts())).get(1)!;
+    expect(r.payload).toEqual({ account_number: '60200987654321', ifsc: 'ICIC0004321', account_holder: 'Sunrise Traders Pvt Ltd' });
+  });
+
+  it('a PDF without a text layer (scanned) is unreadable: no_text_layer', async () => {
+    const r = (await readUploadedDocuments([doc(1, '/u/scanned.pdf')], opts())).get(1)!;
+    expect(r).toEqual({ source: 'pdf', payload: null, confidence: 0, error: 'no_text_layer' });
+  });
+
+  it('a corrupt PDF is unreadable (not retried): not_a_pdf', async () => {
+    const r = (await readUploadedDocuments([doc(1, '/u/corrupt.pdf')], opts())).get(1)!;
+    expect(r).toEqual({ source: 'pdf', payload: null, confidence: 0, error: 'not_a_pdf' });
   });
 });

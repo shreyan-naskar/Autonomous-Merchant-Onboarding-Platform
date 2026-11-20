@@ -14,7 +14,7 @@ import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
 import { createFakeProviderClient } from '../providers/fake.js';
 import { createTesseractOcr } from './ocr.js';
-import { fakeOcr, PAN_SHARP_OCR_TEXT } from './testkit.js';
+import { fakeOcr, PAN_SHARP_OCR_TEXT, textPdf } from './testkit.js';
 
 /*
  * Phase 7.1 end to end: upload a PAN card image over HTTP, let the worker's
@@ -155,6 +155,69 @@ describe('uploaded PAN card image', () => {
     await runDueJobsOnce(worker, clock);
     expect((await get(id)).status).toBe('EXTRACTING');
     expect(db.select().from(jobs).all()[0]).toMatchObject({ type: 'extract', status: 'queued', attempts: 1 });
+  });
+});
+
+describe('uploaded PDF documents (text layer)', () => {
+  /** ocr-pan.json form with every document uploaded as a file. */
+  async function submitAllFiles(gstPdf: Buffer, overrides: Record<string, string> = {}): Promise<string> {
+    const fields = { ...form, ...overrides };
+    const res = await request(app)
+      .post('/applications')
+      .field('merchant_name', fields.merchant_name)
+      .field('pan', fields.pan)
+      .field('gst', fields.gst)
+      .field('bank_account', fields.bank_account)
+      .field('ifsc', fields.ifsc)
+      .attach('PAN_CARD', image('pan-sharp.png'), { filename: 'pan.png', contentType: 'image/png' })
+      .attach('GST_CERT', gstPdf, { filename: 'gst.pdf', contentType: 'application/pdf' })
+      .attach('BANK_PROOF', image('bank-proof.pdf'), { filename: 'bank.pdf', contentType: 'application/pdf' });
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  it('PDFs feed the same extractors: all fields ok -> VERIFYING; PDF fields at 0.95, values masked', async () => {
+    const id = await submitAllFiles(image('gst-cert.pdf'));
+    await drain();
+    const dto = await get(id);
+
+    expect(dto.status).toBe('VERIFYING');
+    expect(ocr.calls).toBe(1); // the PAN image only
+    const byType = (t: string) => {
+      const docId = dto.documents.find((d) => d.type === t)!.id;
+      return dto.extracted_fields.filter((f) => f.document_id === docId).map((f) => [f.field, f.validation_status, f.confidence]);
+    };
+    expect(byType('GST_CERT')).toEqual([
+      ['gst', 'ok', 0.95],
+      ['legal_name', 'ok', 0.95],
+    ]);
+    expect(byType('BANK_PROOF')).toEqual([
+      ['bank_account', 'ok', 0.95],
+      ['ifsc', 'ok', 0.95],
+      ['account_holder', 'ok', 0.95],
+    ]);
+    expect(JSON.stringify(dto)).not.toContain('60200987654321');
+    expect(JSON.stringify(dto)).not.toContain('27AAFCS4321M1Z5');
+    // PDFs have no blur score.
+    expect(dto.documents.find((d) => d.type === 'GST_CERT')!.blur_score).toBeNull();
+  });
+
+  it('GSTIN in the PDF differs from the form -> IN_REVIEW DOC_CONFLICT', async () => {
+    const other = textPdf(['Registration Number: 27AAFCS4321M2Z4', 'Legal Name: Sunrise Traders Pvt Ltd']);
+    const id = await submitAllFiles(other);
+    await drain();
+    const dto = await get(id);
+    expect(dto.status).toBe('IN_REVIEW');
+    expect(dto.review_tasks[0]!.note).toContain('GST_CERT.gst (differs_from_form');
+  });
+
+  it('a scanned PDF (no text layer) -> IN_REVIEW LOW_CONFIDENCE (unreadable)', async () => {
+    const id = await submitAllFiles(textPdf([]));
+    await drain();
+    const dto = await get(id);
+    expect(dto.status).toBe('IN_REVIEW');
+    expect(dto.review_tasks[0]).toMatchObject({ reason: 'LOW_CONFIDENCE' });
+    expect(dto.review_tasks[0]!.note).toContain('GST_CERT.gst (unreadable');
   });
 });
 

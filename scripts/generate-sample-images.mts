@@ -1,16 +1,19 @@
 /*
- * Generates the sample document images in sample-data/ (Phase 7):
+ * Generates the sample document files in sample-data/ (Phase 7):
  *   pan-sharp.png   a clean, synthetic PAN card (OCR-readable)
  *   pan-blurry.png  the same card with a Gaussian blur (fails the blur check)
+ *   gst-cert.pdf    a text-layer GST certificate (pdf-parse, no OCR)
+ *   bank-proof.pdf  a text-layer bank letter
  *
  * The card is fake: it uses the identity of sample-data/ocr-pan.json, not a
  * real person or company. Run from the repo root:
  *   npx tsx scripts/generate-sample-images.mts
  */
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { SAMPLE_BANK_PROOF, SAMPLE_GST_CERT, textPdf } from '../api/src/extraction/testkit.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'sample-data');
@@ -44,7 +47,9 @@ async function main() {
   const sharpPng = await base.clone().png().toBuffer();
   await sharp(sharpPng).toFile(join(out, 'pan-sharp.png'));
   await sharp(sharpPng).blur(6).png().toFile(join(out, 'pan-blurry.png'));
-  console.log('wrote sample-data/pan-sharp.png, sample-data/pan-blurry.png');
+  writeFileSync(join(out, 'gst-cert.pdf'), textPdf(SAMPLE_GST_CERT));
+  writeFileSync(join(out, 'bank-proof.pdf'), textPdf(SAMPLE_BANK_PROOF));
+  console.log('wrote sample-data/pan-sharp.png, pan-blurry.png, gst-cert.pdf, bank-proof.pdf');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

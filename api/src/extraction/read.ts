@@ -3,25 +3,35 @@ import { extname } from 'node:path';
 import { DOCUMENT_TYPES, type DocumentType } from '@app/shared';
 import { blurScore, isBlurry } from './blur.js';
 import type { OcrEngine } from './ocr.js';
+import { pdfText } from './pdf.js';
 import { parseDocumentText } from './text.js';
 
 /*
- * Reads uploaded files (the slow, async part of extraction) into structured
- * payloads that extractFields() treats like JSON documents. Runs in the
- * extract job only, before its DB transaction.
+ * Reads uploaded files (the slow, async part of extraction: blur check + OCR
+ * for images, text layer for PDFs) into structured payloads that
+ * extractFields() treats like JSON documents. Runs in the extract job only,
+ * before its DB transaction.
  */
 
 export interface DocumentReading {
-  source: 'ocr';
-  /** Parsed values, or null when nothing could be read (blurry, not an image, unreadable file). */
+  /** ocr: image through blur check + tesseract; pdf: the PDF's text layer. */
+  source: 'ocr' | 'pdf';
+  /** Parsed values, or null when nothing could be read (blurry, corrupt, no text layer, unreadable file). */
   payload: Record<string, string> | null;
-  /** Confidence of the read (OCR mean confidence, 0-1). Caps every field's confidence. */
+  /** Confidence of the read (OCR mean confidence, or PDF_TEXT_CONFIDENCE), 0-1. Caps every field's confidence. */
   confidence: number;
   blurScore?: number;
   blurry?: boolean;
   /** Why the file could not be read (no values, never file contents). */
-  error?: 'file_unreadable' | 'not_an_image';
+  error?: 'file_unreadable' | 'not_an_image' | 'not_a_pdf' | 'no_text_layer';
 }
+
+/**
+ * A PDF text layer is exact text, not a recognition, but the label-based
+ * parsing is still a heuristic: just below structured JSON (1.0), well above
+ * the 0.8 review threshold.
+ */
+export const PDF_TEXT_CONFIDENCE = 0.95;
 
 export interface ReadableDocument {
   id: number;
@@ -37,6 +47,7 @@ export interface ReadDeps {
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
+const PDF_EXTENSION = '.pdf';
 
 const isDocumentType = (t: string): t is DocumentType => (DOCUMENT_TYPES as readonly string[]).includes(t);
 
@@ -56,10 +67,25 @@ async function readImage(type: DocumentType, file: Buffer, deps: ReadDeps): Prom
   return { source: 'ocr', payload: parseDocumentText(type, text), confidence, blurScore: score, blurry: false };
 }
 
+async function readPdf(type: DocumentType, file: Buffer): Promise<DocumentReading> {
+  let text: string;
+  try {
+    text = await pdfText(file);
+  } catch {
+    // Corrupt or not a PDF: deterministic, so not worth a retry.
+    return { source: 'pdf', payload: null, confidence: 0, error: 'not_a_pdf' };
+  }
+  if (text.replace(/-- \d+ of \d+ --/g, '').trim() === '') {
+    // A scanned PDF: images only. Rasterize + OCR is not implemented.
+    return { source: 'pdf', payload: null, confidence: 0, error: 'no_text_layer' };
+  }
+  return { source: 'pdf', payload: parseDocumentText(type, text), confidence: PDF_TEXT_CONFIDENCE };
+}
+
 /**
  * One reading per uploaded document that has no structured payload and a
- * readable format (PNG/JPEG images). Keyed by document id; other documents
- * are absent from the map and keep the "unreadable upload" rule.
+ * readable format (PNG/JPEG images, PDFs). Keyed by document id; other
+ * documents are absent from the map and keep the "unreadable upload" rule.
  */
 export async function readUploadedDocuments(
   docs: readonly ReadableDocument[],
@@ -69,15 +95,17 @@ export async function readUploadedDocuments(
   const out = new Map<number, DocumentReading>();
   for (const d of docs) {
     if (d.payload != null || !d.path || !isDocumentType(d.type)) continue;
-    if (!IMAGE_EXTENSIONS.has(extname(d.path).toLowerCase())) continue;
+    const ext = extname(d.path).toLowerCase();
+    const source = ext === PDF_EXTENSION ? 'pdf' : IMAGE_EXTENSIONS.has(ext) ? 'ocr' : undefined;
+    if (!source) continue;
     let file: Buffer;
     try {
       file = await read(d.path);
     } catch {
-      out.set(d.id, { source: 'ocr', payload: null, confidence: 0, error: 'file_unreadable' });
+      out.set(d.id, { source, payload: null, confidence: 0, error: 'file_unreadable' });
       continue;
     }
-    out.set(d.id, await readImage(d.type, file, deps));
+    out.set(d.id, source === 'pdf' ? await readPdf(d.type, file) : await readImage(d.type, file, deps));
   }
   return out;
 }
