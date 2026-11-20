@@ -100,8 +100,15 @@ export function createMockApp(config: MockConfig): MockApp {
     res.json({ status: 'ok', service: 'mock-providers' });
   });
 
-  async function deliver(callback: ProviderCallback): Promise<void> {
+  /** Callbacks already sent, by event_id (bounded), for /admin/redeliver. */
+  const sent = new Map<string, ProviderCallback>();
+  const SENT_LIMIT = 1_000;
+
+  async function deliver(callback: ProviderCallback): Promise<{ status?: number; response?: unknown; error?: string }> {
     const body = JSON.stringify(callback);
+    sent.delete(callback.event_id);
+    sent.set(callback.event_id, callback);
+    if (sent.size > SENT_LIMIT) sent.delete(sent.keys().next().value!);
     try {
       const res = await doFetch(config.webhookUrl, {
         method: 'POST',
@@ -109,10 +116,12 @@ export function createMockApp(config: MockConfig): MockApp {
         body,
         signal: AbortSignal.timeout(10_000),
       });
-      await res.arrayBuffer().catch(() => undefined);
+      const response = await res.json().catch(() => undefined);
       config.onDelivery?.({ event_id: callback.event_id, kind: callback.kind, status: res.status });
+      return { status: res.status, response };
     } catch (err) {
       config.onDelivery?.({ event_id: callback.event_id, kind: callback.kind, error: (err as Error).message });
+      return { error: (err as Error).message };
     }
   }
 
@@ -162,10 +171,27 @@ export function createMockApp(config: MockConfig): MockApp {
     res.json(chaos);
   });
 
-  /** Restore DEFAULT_CHAOS merged with the startup chaos settings. */
+  /** Restore DEFAULT_CHAOS merged with the startup chaos settings, and forget sent callbacks. */
   app.post('/admin/reset', (_req, res) => {
     Object.assign(chaos, DEFAULT_CHAOS, config.chaos);
+    sent.clear();
     res.json(chaos);
+  });
+
+  /**
+   * Send an already-delivered callback again, byte-identical and signed the
+   * same way, as a provider retry would: `{event_id}` (default: the most
+   * recent one). Answers with the API's reply to the redelivery.
+   */
+  app.post('/admin/redeliver', async (req, res) => {
+    const eventId = typeof req.body?.event_id === 'string' ? req.body.event_id : [...sent.keys()].at(-1);
+    const callback = eventId ? sent.get(eventId) : undefined;
+    if (!callback) {
+      res.status(404).json({ error: 'UNKNOWN_EVENT', event_id: eventId ?? null });
+      return;
+    }
+    const result = await deliver(callback);
+    res.json({ event_id: callback.event_id, kind: callback.kind, api_status: result.status ?? null, api_response: result.response ?? null, error: result.error });
   });
 
   return app;

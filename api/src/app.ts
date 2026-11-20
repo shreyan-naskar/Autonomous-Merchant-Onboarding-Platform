@@ -59,7 +59,7 @@ export function createApp(deps: AppDeps): Express {
 
   app.use('/review-tasks', reviewTasksRouter({ db }));
   app.use('/jobs', jobsRouter({ db, logger, now }));
-  app.use('/admin', adminRouter({ merchantService, logger }));
+  app.use('/admin', adminRouter({ db, demoMode: config.demoMode, merchantService, logger }));
 
   deps.mount?.(app);
 

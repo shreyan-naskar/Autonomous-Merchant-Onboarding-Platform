@@ -2,10 +2,15 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
+import request from 'supertest';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createApp } from './app.js';
+import { loadConfig } from './config.js';
+import { openDb } from './db/client.js';
 import { callbackEvents } from './db/schema.js';
 import { openTask, sample, startE2E, type E2E } from './e2e.js';
 import { signBody } from './http/signature.js';
+import { createLogger } from './logger.js';
 
 /*
  * Phase 8 security pass, as tests so it stays true:
@@ -165,5 +170,31 @@ describe('4. every operator action requires a note', () => {
     const res = await e.api().post('/jobs/1/requeue').send({});
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body)).toContain('Note is required');
+  });
+});
+
+describe('5. demo reset endpoint', () => {
+  let e: E2E | undefined;
+  afterEach(async () => {
+    await e?.close();
+    e = undefined;
+  });
+
+  it('POST /admin/reset-data wipes every table in DEMO_MODE', async () => {
+    e = await startE2E();
+    await e.submit(sample('happy.json'));
+    await e.drain();
+    await e.api().post('/admin/merchant-service').send({ fail: true }).expect(200);
+    const res = await e.api().post('/admin/reset-data').expect(200);
+    expect(res.body.deleted.applications).toBe(1);
+    expect((await e.api().get('/applications')).body.count).toBe(0);
+    expect((await e.api().get('/admin/merchant-service')).body).toEqual({ fail: false });
+  });
+
+  it('is 404 when DEMO_MODE is off', async () => {
+    const db = openDb(':memory:');
+    const app = createApp({ config: loadConfig({ DB_PATH: ':memory:', DEMO_MODE: 'false' }), logger: createLogger({ level: 'silent' }), db });
+    await request(app).post('/admin/reset-data').expect(404);
+    db.$client.close();
   });
 });

@@ -173,6 +173,33 @@ describe('chaos settings', () => {
     expect(sent[0]!.callback.event_id).toBe(sent[1]!.callback.event_id);
   });
 
+  it('POST /admin/redeliver resends one delivered callback, byte-identical and identically signed', async () => {
+    await call(...happy.PAN);
+    await call(...happy.GST);
+    await sched.advance(1_000);
+    expect(sent).toHaveLength(2);
+
+    const res = await request(app).post('/admin/redeliver').send({ event_id: sent[0]!.callback.event_id });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ event_id: sent[0]!.callback.event_id, kind: 'PAN', api_status: 200, api_response: {} });
+    expect(sent).toHaveLength(3);
+    expect(sent[2]!.body).toBe(sent[0]!.body);
+    expect(sent[2]!.signature).toBe(sent[0]!.signature);
+
+    // Default: the most recent delivery (now the redelivered PAN callback).
+    await request(app).post('/admin/redeliver').send({}).expect(200);
+    expect(sent[3]!.body).toBe(sent[0]!.body);
+  });
+
+  it('POST /admin/redeliver: 404 for an unknown event, and after /admin/reset', async () => {
+    await request(app).post('/admin/redeliver').send({ event_id: 'evt_nope' }).expect(404);
+    await call(...happy.PAN);
+    await sched.advance(1_000);
+    await request(app).post('/admin/reset').expect(200);
+    await request(app).post('/admin/redeliver').send({}).expect(404);
+    expect(sent).toHaveLength(1);
+  });
+
   it('dropCallback sends nothing', async () => {
     makeApp({ dropCallback: true });
     await call(...happy.GST);
