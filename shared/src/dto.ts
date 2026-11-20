@@ -82,6 +82,7 @@ export const ReviewTaskDtoSchema = z.object({
   status: ReviewTaskStatusSchema,
   resolution: z.string().nullable(),
   note: z.string().nullable(),
+  resolution_note: z.string().nullable(),
   created_at: iso,
   resolved_at: iso.nullable(),
 });

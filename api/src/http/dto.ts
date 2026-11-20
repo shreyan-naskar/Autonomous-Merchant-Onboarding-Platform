@@ -76,6 +76,7 @@ export function toDetailDto(rows: ApplicationDetailRows, now: number): Applicati
       status: t.status,
       resolution: t.resolution,
       note: t.note === null ? null : redactText(t.note),
+      resolution_note: t.resolutionNote === null ? null : redactText(t.resolutionNote),
       created_at: iso(t.createdAt),
       resolved_at: isoOrNull(t.resolvedAt),
     })),

@@ -155,11 +155,11 @@ describe('verification with the mock providers', () => {
     // No raw PAN, GSTIN or account number anywhere in the response.
     expect(JSON.stringify(d)).not.toMatch(/AABCL1234K|50100234567891/);
 
-    // Later timeouts find nothing pending; the approve job (Phase 5 stub) runs.
+    // Later timeouts find nothing pending; the approve and create_merchant jobs run (Phase 5).
     clock += TIMEOUT;
     await drain();
     d = await detail(id);
-    expect(d.status).toBe('VERIFIED');
+    expect(d.status).toBe('MERCHANT_CREATED');
     expect(events(d, 'VERIFICATION_TIMED_OUT')).toEqual([]);
     expect(db.select().from(jobs).all().every((j) => j.status === 'done')).toBe(true);
   });
@@ -249,11 +249,11 @@ describe('verification with the mock providers', () => {
     ]);
     expect(callbackRows().map((e) => e.note)).toEqual(Array(4).fill('late'));
 
-    // The retries' timeouts find superseded rows: nothing escalates.
+    // The retries' timeouts find superseded rows: nothing escalates (the app is approved and created meanwhile).
     clock += TIMEOUT;
     await drain();
     d = await detail(id);
-    expect(d.status).toBe('VERIFIED');
+    expect(d.status).toBe('MERCHANT_CREATED');
     expect(d.review_tasks).toEqual([]);
     expect(events(d, 'VERIFICATION_TIMED_OUT')).toHaveLength(4);
   });

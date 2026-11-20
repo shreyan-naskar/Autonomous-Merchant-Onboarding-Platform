@@ -10,7 +10,7 @@ beforeEach(() => {
 afterEach(() => db.$client.close());
 
 describe('schema / migration', () => {
-  it('creates all 8 tables', () => {
+  it('creates all 9 tables', () => {
     const names = (
       db.$client
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_\\_%' ESCAPE '\\'")
@@ -25,6 +25,7 @@ describe('schema / migration', () => {
       'documents',
       'extracted_fields',
       'jobs',
+      'merchant_accounts',
       'review_tasks',
       'verifications',
     ]);

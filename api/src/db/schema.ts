@@ -33,7 +33,11 @@ export const applications = sqliteTable(
     stateEnteredAt: integer('state_entered_at').notNull(),
     merchantId: text('merchant_id'),
   },
-  (t) => [index('applications_status_idx').on(t.status)],
+  (t) => [
+    index('applications_status_idx').on(t.status),
+    // One merchant ID belongs to at most one application (NULLs are not compared).
+    uniqueIndex('applications_merchant_id_uq').on(t.merchantId),
+  ],
 );
 
 export const documents = sqliteTable(
@@ -151,7 +155,10 @@ export const reviewTasks = sqliteTable(
     reason: text().notNull(),
     status: text({ enum: REVIEW_TASK_STATUSES }).notNull().default('OPEN'),
     resolution: text(),
+    // System-written description of why the task exists.
     note: text(),
+    // Operator's note when resolving (also in the audit detail).
+    resolutionNote: text('resolution_note'),
     createdAt: integer('created_at').notNull(),
     resolvedAt: integer('resolved_at'),
   },
@@ -174,6 +181,21 @@ export const jobs = sqliteTable(
   },
   (t) => [index('jobs_due_idx').on(t.status, t.runAt)],
 );
+
+/**
+ * Ledger of the simulated internal merchant ID service. The unique
+ * application_id is the service's idempotency key: asking twice for the same
+ * application returns the same MID, even across restarts or a crash between
+ * issuing the ID and recording it on the application.
+ */
+export const merchantAccounts = sqliteTable('merchant_accounts', {
+  merchantId: text('merchant_id').primaryKey(),
+  applicationId: text('application_id')
+    .notNull()
+    .unique()
+    .references(() => applications.id),
+  createdAt: integer('created_at').notNull(),
+});
 
 export type Application = typeof applications.$inferSelect;
 export type NewApplication = typeof applications.$inferInsert;

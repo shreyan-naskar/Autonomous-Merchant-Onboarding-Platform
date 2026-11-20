@@ -39,3 +39,26 @@ export const auditOf = (db: Db, id = 'app-1') =>
 export const tasksOf = (db: Db, id = 'app-1') =>
   db.select().from(reviewTasks).where(eq(reviewTasks.applicationId, id)).orderBy(reviewTasks.id).all();
 export const jobsOfType = (db: Db, type: string) => db.select().from(jobs).where(eq(jobs.type, type)).orderBy(jobs.id).all();
+
+/** Insert a completed verification row directly (test fixture). */
+export function seedVerification(
+  db: Db,
+  id: string,
+  kind: 'PAN' | 'GST' | 'BANK' | 'RISK',
+  status: 'PASSED' | 'FAILED' | 'PENDING' | 'TIMED_OUT' = 'PASSED',
+  { score = null as number | null, bankVersion = 1, now = T0 } = {},
+) {
+  return db
+    .insert(verifications)
+    .values({ applicationId: id, kind, status, bankVersion, score, requestedAt: now, completedAt: status === 'PENDING' ? null : now })
+    .returning()
+    .get();
+}
+
+/** An application in VERIFIED with all four checks PASSED (RISK with `riskScore`). */
+export function verifiedApp(db: Db, id = 'app-1', { riskScore = 20 }: { riskScore?: number | null } = {}, now = T0) {
+  verifyingApp(db, id, HAPPY_INPUT, now);
+  for (const kind of ['PAN', 'GST', 'BANK'] as const) seedVerification(db, id, kind, 'PASSED', { now });
+  seedVerification(db, id, 'RISK', 'PASSED', { score: riskScore, now });
+  return transition(db, id, 'VERIFIED', { actor: 'system', event: 'ALL_CHECKS_PASSED', now });
+}

@@ -15,6 +15,13 @@
       "when": 1795197915142,
       "tag": "0001_callback_request_id",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795199502176,
+      "tag": "0002_phase5_merchant",
+      "breakpoints": true
     }
   ]
 }

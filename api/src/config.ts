@@ -75,6 +75,8 @@ export function loadConfig(env: Env = process.env) {
       jobMaxAttempts: 5,
       // Re-requests after a verification timeout before escalating to review.
       verificationMaxRetries: 2,
+      // Tries of create_merchant before MERCHANT_CREATION_FAILED (backoff between them).
+      merchantCreateMaxAttempts: 3,
     },
   } as const;
 }
