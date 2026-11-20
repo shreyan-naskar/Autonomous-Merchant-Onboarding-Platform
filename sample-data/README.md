@@ -23,7 +23,20 @@ set them in a copy of `happy.json` to try them):
 | Value | Effect |
 |---|---|
 | PAN `ZZZZZ9999Z` (GSTIN must then embed it, e.g. `27ZZZZZ9999Z1Z5`) | PAN verification fails |
-| Bank account ending `0000` | bank verification times out (no callback) |
+| Bank account ending `0000` | bank provider never calls back: the API times out, retries twice, then `IN_REVIEW` (`BANK_TIMEOUT`) |
+| Merchant name containing `RISKY` | risk score 85 (above the 70 threshold); other names score 0-40 |
+
+Global chaos settings of the mock providers (affect requests made after the change):
+
+```sh
+curl localhost:4000/admin/config
+curl -X POST localhost:4000/admin/config -H 'content-type: application/json' \
+  -d '{"delayMs":1500,"failKinds":["GST"],"duplicateCallback":true,"dropCallback":false,"lateCallbackMs":0}'
+curl -X POST localhost:4000/admin/reset
+```
+
+`lateCallbackMs > 0` sends callbacks after that delay instead of `delayMs`
+(set it above the API's 30s demo timeout to see a late callback).
 
 The API's in-process worker runs extraction (Phase 3): `happy.json` and
 `gst-fail.json` reach `VERIFYING`, `conflict.json` lands in `IN_REVIEW`,
