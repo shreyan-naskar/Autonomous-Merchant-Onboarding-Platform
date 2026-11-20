@@ -13,8 +13,8 @@ from these two files alone.
 | 1. Domain model + state machine | DONE | schema, migration, transition() + guards, walk script |
 | 2. Intake API | DONE | POST/GET/PATCH /applications, masking layer, sample-data |
 | 3. Worker + extraction | DONE | worker, validators, extract job, decision, NEEDS_INFO re-entry |
-| 4. Mock providers + callbacks | NEXT | |
-| 5. Approval, MID, bank change | todo | |
+| 4. Mock providers + callbacks | DONE | signed async callbacks, idempotent webhook, evaluate, timeouts/retries, late reconciliation |
+| 5. Approval, MID, bank change | NEXT | |
 | 6. UI | todo | |
 | 7. Stretch | todo | cut first if behind |
 | 8. Hardening, docs, demo | todo | |
@@ -142,6 +142,69 @@ These come from the kickoff prompt and override or refine PLAN.md:
   `start_verifications`. Fields + transition + review task + next job are one
   transaction; SUBMITTED -> EXTRACTING commits first so a retry resumes from
   EXTRACTING. Extract jobs for apps in any other state are no-ops.
+- Mock providers (Phase 4): `createMockApp({webhookUrl, hmacSecret, chaos?,
+  scheduler?, fetch?, onDelivery?})` in `mock-providers/src/app.ts`, exported
+  as package `mock-providers` (api devDependency) so API tests can start it.
+  `POST /pan/verify|/gst/verify|/bank/verify|/risk/score` -> `202
+  {request_id}`, then a callback `{event_id, request_id, kind, result:{status,
+  reason?, score?}, application_ref, bank_version?}` with `X-Signature` = hex
+  HMAC-SHA256 of the raw body. `GET/POST /admin/config` (global chaos:
+  `delayMs`, `failKinds`, `duplicateCallback`, `dropCallback`,
+  `lateCallbackMs`), `POST /admin/reset`. Settings are read per request.
+  Magic values: PAN `ZZZZZ9999Z` fails, GSTIN ending `Z9` fails, account
+  ending `0000` never calls back, name containing `RISKY` scores 85 (others
+  0-40, deterministic). Wire schemas (`ProviderCallbackSchema`,
+  `ChaosConfigSchema`, `PROVIDER_PATHS`, `MAGIC`) live in `shared/src/providers.ts`.
+  `createManualScheduler()` gives tests virtual time: `sched.advance(ms)`
+  sends and awaits every due callback.
+- Provider client: `ProviderClient` interface in `api/src/providers/client.ts`
+  (`createHttpProviderClient({baseUrl})`, `buildProviderRequest(kind, app)`);
+  `createFakeProviderClient()` in `fake.ts` records calls, never calls back,
+  `fake.failing.add(kind)` simulates an outage. `createJobHandlers({providers})`
+  now takes the client.
+- Verification code is in `api/src/verification/`:
+  - `latest.ts` `currentVerification(db, app, kind)`: newest non-superseded
+    row (BANK: current bank_version). evaluate(), the APPROVED guard and
+    start_verifications all use it.
+  - `start.ts` `start_verifications` job, payload `{application_id, kinds?}`
+    (default all four). A kind is requested when it has no current row or
+    the current row is TIMED_OUT (-> attempt + 1); a PENDING row without
+    request_id (failed earlier run) is reused; anything else is skipped. Only
+    acts in VERIFYING. Provider calls happen outside transactions; each
+    accepted request stores request_id + enqueues `verification_timeout`
+    (`{application_id, verification_id}`, +30s demo) + audits
+    `VERIFICATION_REQUESTED` in one transaction. Any failed call throws after
+    the rest are recorded (worker retries).
+  - `callback.ts` `receiveCallback` (webhook) and `applyCallback`. Outcomes:
+    `applied`, `late`, `stale`, `already_completed`, `mismatch`,
+    `unknown_request` (stored in `callback_events.note`; `processed` is false
+    only for unknown_request and duplicates). A real result supersedes newer
+    PENDING/TIMED_OUT attempts of the same kind. Audit events (actor
+    `provider`, to_state null): `VERIFICATION_RESULT`, `LATE_CALLBACK`,
+    `STALE_CALLBACK`. `applyEarlyCallbacks` applies a callback that arrived
+    before its request_id was stored.
+  - `evaluate.ts` pure `decideVerification`/`failureReason` + `evaluate(tx,
+    appId, now)`. Reason = checks in PAN, GST, BANK, RISK order up to the last
+    FAILED one, each `<KIND>_<OK|FAILED|PENDING|TIMED_OUT>`.
+    VERIFIED: event `ALL_CHECKS_PASSED` + `approve` job (stub handler).
+    IN_REVIEW: event `VERIFICATION_FAILED` + review task (reason as above,
+    note lists every check with provider reason/score).
+  - `timeout.ts` `verification_timeout` job: PENDING -> TIMED_OUT; if
+    `attempt <= verificationMaxRetries` (2) enqueue `start_verifications
+    {kinds:[kind]}` at `now + backoffBase * 2^(attempt-1)`; else IN_REVIEW
+    (event `VERIFICATION_TIMED_OUT`, review task `<KIND>_TIMEOUT`). Outside
+    VERIFYING it only marks TIMED_OUT.
+- Webhook: `api/src/http/routes/webhooks.ts`, mounted before
+  `express.json` in `createApp` (raw body for HMAC). `verifySignature` in
+  `api/src/http/signature.ts` (timingSafeEqual, accepts `sha256=` prefix).
+  401 on a bad or missing signature, 400 on invalid JSON or schema, and
+  nothing is stored in either case. 200 `{status: accepted|duplicate,
+  event_id, outcome?}`.
+- New audit event `VERIFICATION_REQUESTED`. Migration `0001` adds
+  `callback_events.request_id` (+ index).
+- Test helpers: `api/src/verification/testkit.ts` (in-memory env,
+  `verifyingApp()`, row getters). End-to-end: `api/src/verification/flow.test.ts`
+  (API + mock on random ports, `advance(ms)` runs jobs at their run_at).
 - better-sqlite3 13.2 builds/loads on this Fedora machine with no extra system
   packages. npm 11 gates install scripts: `allowScripts` in root package.json
   approves better-sqlite3 and esbuild.
@@ -178,6 +241,17 @@ These come from the kickoff prompt and override or refine PLAN.md:
   transaction: fields/docs + NEEDS_INFO -> EXTRACTING (actor merchant, event
   `INFO_SUPPLIED`, detail `{fields, documents}`) + new `extract` job; no
   separate APPLICATION_UPDATED row. A no-op PATCH does not move the app.
+- Phase 4: callback processing runs **in the webhook's transaction** (no
+  `process_callback` job). Inserting the event and applying it commit
+  together, so "stored" always means "applied". If applying throws, nothing
+  is stored and the 500 makes the provider redeliver. The work is a few
+  indexed SQLite writes, so the 200 is still fast.
+- Phase 4: the mock never retries a failed callback delivery (API down ->
+  that result is lost, the API times out and re-requests). Fine for the demo.
+- Phase 4: the review reason is built when the first failure arrives. With
+  real-time callbacks the order is usually request order (PAN, GST, ...), but
+  if GST's failure beat PAN's pass the reason would read
+  `PAN_PENDING_GST_FAILED`. The review task note lists every check.
 - `jobs.status = 'failed'` is unused: failed attempts go back to `queued`
   until they become `dead`.
 - Known gap: a job left `running` by a process crash is never reclaimed.
@@ -317,3 +391,47 @@ Next: Phase 4. Mock provider endpoints + HMAC callbacks, real
 `start_verifications` handler (replace the stub in `jobs/handlers.ts`),
 `POST /webhooks/provider` with idempotent `callback_events`, `evaluate()`,
 `verification_timeout` job.
+
+### Phase 4: Mock providers and callbacks — DONE (2026-11-20)
+
+Done (commits 4.1-4.7 + end-to-end tests):
+- Mock providers with signed async callbacks, chaos config, magic values,
+  injectable scheduler (13 tests, virtual time).
+- `ProviderClient` interface, HTTP client, in-memory fake.
+- `start_verifications` (idempotent, partial-failure safe), webhook with
+  raw-body HMAC + duplicate rows, callback processing (late / stale / early /
+  mismatched), `evaluate()`, `verification_timeout` with 2 retries and
+  `<KIND>_TIMEOUT` escalation. `approve` job is a logging stub.
+- End-to-end with the mock on a random port: happy -> VERIFIED; duplicate
+  callbacks -> one effect + one is_duplicate row per event; gst-fail ->
+  IN_REVIEW `PAN_OK_GST_FAILED`; all four callbacks late after timeout ->
+  `LATE_CALLBACK` x4, retries superseded, VERIFIED; account `...0000` ->
+  3 attempts (backoff 1s, 2s) -> IN_REVIEW `BANK_TIMEOUT`; forged signature
+  and wrong-secret provider -> 401, nothing stored.
+
+Mutation checks: signature always valid fails 5 tests; skipping the
+duplicate check fails 3; late result not superseding the retry fails 2;
+one retry too few fails 2; ignoring failures in evaluate fails 4.
+
+Test results (`npm test`, three consecutive runs):
+```
+ Test Files  21 passed (21)
+      Tests  286 passed (286)
+```
+Checks: live API (:3999, scratch DB) + mock (:4999), real timers.
+happy.json -> VERIFIED (4 requests, 4 results); gst-fail.json -> IN_REVIEW
+`PAN_OK_GST_FAILED`, the later result recorded with from_state IN_REVIEW;
+with `duplicateCallback` on: 4 applied + 4 `duplicate ignored` rows, still
+4 results; forged signature -> 401. Neither log contained a raw PAN or
+account. `npm run typecheck` clean; status-writer grep shows only
+`transition.ts` writing `applications.status`.
+
+Next: Phase 5. Replace the `approve` stub in `jobs/handlers.ts` (risk score
+is on the RISK row's `score`; > `RISK_THRESHOLD` -> IN_REVIEW `HIGH_RISK`).
+For the bank change: bump `bank_version`, set `superseded` on the current
+BANK row, then enqueue `start_verifications {kinds:['BANK']}`. Old-version
+callbacks are already handled as `STALE_CALLBACK`. For operator re-verify
+(IN_REVIEW -> VERIFYING), supersede the current rows of the kinds being
+re-run first. Otherwise a TIMED_OUT attempt 3 is retried as attempt 4 and
+escalates on its first timeout.
+
