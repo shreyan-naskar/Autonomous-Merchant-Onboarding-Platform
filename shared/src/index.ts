@@ -4,6 +4,7 @@ export * from './mask.js';
 export * from './domain.js';
 export * from './intake.js';
 export * from './dto.js';
+export * from './validators.js';
 
 export const HealthSchema = z.object({
   status: z.string(),
