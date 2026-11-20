@@ -54,6 +54,7 @@ export type Actor = z.infer<typeof ActorSchema>;
  */
 export const AUDIT_EVENTS = [
   'APPLICATION_SUBMITTED',
+  'APPLICATION_UPDATED',
   'EXTRACTION_STARTED',
   'INFO_REQUIRED',
   'INFO_SUPPLIED',
@@ -105,3 +106,14 @@ export type ReviewTaskStatus = z.infer<typeof ReviewTaskStatusSchema>;
 export const JOB_STATUSES = ['queued', 'running', 'done', 'failed', 'dead'] as const;
 export const JobStatusSchema = z.enum(JOB_STATUSES);
 export type JobStatus = z.infer<typeof JobStatusSchema>;
+
+/** Background job types handled by the API worker. */
+export const JOB_TYPES = [
+  'extract',
+  'start_verifications',
+  'verification_timeout',
+  'approve',
+  'create_merchant',
+] as const;
+export const JobTypeSchema = z.enum(JOB_TYPES);
+export type JobType = z.infer<typeof JobTypeSchema>;

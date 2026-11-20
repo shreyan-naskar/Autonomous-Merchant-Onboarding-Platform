@@ -23,3 +23,46 @@ export function redactText(text: string): string {
     .replace(PAN_LIKE, (m) => mask(m) as string)
     .replace(ACCOUNT_LIKE, (m) => mask(m) as string);
 }
+
+/**
+ * Keys whose values are sensitive wherever they appear (form fields, document
+ * payloads, provider results). A GSTIN embeds the PAN, so GST keys count too.
+ * Shared by the API response mapper and the log redactor.
+ */
+export const SENSITIVE_KEYS = [
+  'pan',
+  'gst',
+  'gstin',
+  'bank_account',
+  'bankAccount',
+  'account_number',
+  'accountNumber',
+] as const;
+
+const SENSITIVE = new Set<string>(SENSITIVE_KEYS);
+const ID_KEY = /(^id$|_id$|Id$)/;
+
+export function isSensitiveKey(key: string): boolean {
+  return SENSITIVE.has(key);
+}
+
+/**
+ * Deep-copy free-form JSON (document payloads, audit details) for display:
+ * values under SENSITIVE_KEYS are mask()ed, other strings go through
+ * redactText(), except id-like keys (a UUID's last group can be all digits).
+ */
+export function maskDeep(value: unknown, key?: string): unknown {
+  if (key !== undefined && SENSITIVE.has(key)) {
+    if (value === null || value === undefined) return value ?? null;
+    if (typeof value === 'string' || typeof value === 'number') return mask(String(value));
+    return '[REDACTED]';
+  }
+  if (typeof value === 'string') return key !== undefined && ID_KEY.test(key) ? value : redactText(value);
+  if (Array.isArray(value)) return value.map((v) => maskDeep(v));
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = maskDeep(v, k);
+    return out;
+  }
+  return value;
+}
