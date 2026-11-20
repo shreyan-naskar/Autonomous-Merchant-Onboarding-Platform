@@ -1,0 +1,34 @@
+{
+  "name": "autonomous-merchant-onboarding-platform",
+  "version": "1.0.0",
+  "description": "An onboarding workflow that receives a merchant application, extracts and validates information, coordinates simulated verification systems, manages exceptions and progresses an eligible application to an approved state.",
+  "main": "index.js",
+  "workspaces": [
+    "api",
+    "mock-providers",
+    "web",
+    "shared"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "concurrently \"npm run dev -w api\" \"npm run dev -w mock-providers\" \"npm run dev -w web\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shreyan-naskar/Autonomous-Merchant-Onboarding-Platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/shreyan-naskar/Autonomous-Merchant-Onboarding-Platform/issues"
+  },
+  "homepage": "https://github.com/shreyan-naskar/Autonomous-Merchant-Onboarding-Platform#readme",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
