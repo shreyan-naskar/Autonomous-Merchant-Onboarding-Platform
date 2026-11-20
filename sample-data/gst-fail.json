@@ -1,0 +1,15 @@
+{
+  "merchant_name": "Mysore Spice Company",
+  "pan": "AACCM5678P",
+  "gst": "29AACCM5678P1Z9",
+  "bank_account": "60200345678912",
+  "ifsc": "ICIC0002345",
+  "documents": [
+    { "type": "PAN_CARD", "payload": { "pan": "AACCM5678P", "name": "Mysore Spice Company" } },
+    { "type": "GST_CERT", "payload": { "gstin": "29AACCM5678P1Z9", "legal_name": "Mysore Spice Company" } },
+    {
+      "type": "BANK_PROOF",
+      "payload": { "account_number": "60200345678912", "ifsc": "ICIC0002345", "account_holder": "Mysore Spice Company" }
+    }
+  ]
+}

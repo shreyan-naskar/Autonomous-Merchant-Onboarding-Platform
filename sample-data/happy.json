@@ -1,0 +1,15 @@
+{
+  "merchant_name": "Lakshmi Textiles Pvt Ltd",
+  "pan": "AABCL1234K",
+  "gst": "27AABCL1234K1Z5",
+  "bank_account": "50100234567891",
+  "ifsc": "HDFC0001234",
+  "documents": [
+    { "type": "PAN_CARD", "payload": { "pan": "AABCL1234K", "name": "Lakshmi Textiles Pvt Ltd" } },
+    { "type": "GST_CERT", "payload": { "gstin": "27AABCL1234K1Z5", "legal_name": "Lakshmi Textiles Pvt Ltd" } },
+    {
+      "type": "BANK_PROOF",
+      "payload": { "account_number": "50100234567891", "ifsc": "HDFC0001234", "account_holder": "Lakshmi Textiles Pvt Ltd" }
+    }
+  ]
+}

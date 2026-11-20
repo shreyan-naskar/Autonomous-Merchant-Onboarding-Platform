@@ -1,0 +1,15 @@
+{
+  "merchant_name": "Ganesh Hardware Stores",
+  "pan": "AADCG9012Q",
+  "gst": "07AADCG9012Q1Z3",
+  "bank_account": "70300456789123",
+  "ifsc": "SBIN0003456",
+  "documents": [
+    { "type": "PAN_CARD", "payload": { "pan": "AADCG9012Q", "name": "Ramesh Electricals Pvt Ltd" } },
+    { "type": "GST_CERT", "payload": { "gstin": "07AADCG9012Q1Z3", "legal_name": "Ganesh Hardware Stores" } },
+    {
+      "type": "BANK_PROOF",
+      "payload": { "account_number": "70300456789123", "ifsc": "SBIN0003456", "account_holder": "Ganesh Hardware Stores" }
+    }
+  ]
+}

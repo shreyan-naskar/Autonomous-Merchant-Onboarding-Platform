@@ -1,0 +1,14 @@
+{
+  "merchant_name": "Sunrise Bakery",
+  "pan": "AAECS3456R",
+  "gst": "33AAECS3456R1Z1",
+  "bank_account": "80400567891234",
+  "ifsc": "UTIB0004567",
+  "documents": [
+    { "type": "PAN_CARD", "payload": { "pan": "AAECS3456R", "name": "Sunrise Bakery" } },
+    {
+      "type": "BANK_PROOF",
+      "payload": { "account_number": "80400567891234", "ifsc": "UTIB0004567", "account_holder": "Sunrise Bakery" }
+    }
+  ]
+}
