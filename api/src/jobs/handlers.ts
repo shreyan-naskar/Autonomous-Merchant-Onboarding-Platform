@@ -28,5 +28,9 @@ export function createJobHandlers(deps: JobHandlerDeps): JobHandlers {
     start_verifications: async (payload, ctx) => {
       await runStartVerifications(ctx, deps.providers, applicationId(payload), KindsSchema.parse(payload.kinds));
     },
+    // Enqueued by evaluate() on VERIFIED. Stub until Phase 5 adds auto-approval.
+    approve: (payload, ctx) => {
+      ctx.logger.info({ application_id: applicationId(payload) }, 'approve: stub (Phase 5)');
+    },
   };
 }
