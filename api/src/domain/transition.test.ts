@@ -216,6 +216,53 @@ describe('transition(): APPROVED guard', () => {
     expectBlocked(id, ['BANK']);
   });
 
+  // Every way a single check can block approval, from both states that may approve.
+  const BLOCKERS: [string, (id: string) => void, string][] = [
+    ['RISK missing', (id) => ['PAN', 'GST', 'BANK'].forEach((k) => seedCheck(id, k as VerificationKind)), 'RISK'],
+    ['GST failed', (id) => (seedAllPassed(id), seedCheck(id, 'GST', 'FAILED')), 'GST'],
+    ['PAN pending', (id) => (seedAllPassed(id), seedCheck(id, 'PAN', 'PENDING')), 'PAN'],
+    ['RISK timed out', (id) => (seedAllPassed(id), seedCheck(id, 'RISK', 'TIMED_OUT')), 'RISK'],
+    [
+      'BANK on an old bank_version',
+      (id) => {
+        db.update(applications).set({ bankVersion: 2 }).where(eq(applications.id, id)).run();
+        seedAllPassed(id, 1);
+      },
+      'BANK',
+    ],
+    [
+      'BANK superseded',
+      (id) => {
+        for (const kind of ['PAN', 'GST', 'RISK'] as const) seedCheck(id, kind);
+        seedCheck(id, 'BANK', 'PASSED', { superseded: true });
+      },
+      'BANK',
+    ],
+  ];
+  describe.each(['VERIFIED', 'IN_REVIEW'] as const)('from %s', (from) => {
+    it.each(BLOCKERS)('blocks when %s', (_name, seed, kind) => {
+      const id = seedApp(from);
+      seed(id);
+      expectBlocked(id, [kind]);
+    });
+
+    it('allows approval when all four passed for the current bank_version', () => {
+      const id = seedApp(from);
+      seedAllPassed(id);
+      expect(approve(id).status).toBe('APPROVED');
+    });
+  });
+
+  it('explains each blocking check in the error message', () => {
+    const id = seedApp('VERIFIED', { bankVersion: 2 });
+    seedAllPassed(id, 1);
+    seedCheck(id, 'BANK', 'PENDING', { bankVersion: 2 });
+    seedCheck(id, 'GST', 'FAILED');
+    expect(() => approve(id)).toThrow(
+      'Cannot approve: GST is failed; BANK is pending for bank version 2. All of PAN, GST, BANK, RISK must pass first.',
+    );
+  });
+
   it('allows approval once BANK passes for the current bank_version', () => {
     const id = seedApp('IN_REVIEW', { bankVersion: 2 });
     seedAllPassed(id, 1);
