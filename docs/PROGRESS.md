@@ -10,8 +10,8 @@ from these two files alone.
 | Phase | Status | Notes |
 |---|---|---|
 | 0. Setup | DONE | deps, Vitest, config, error handler, masking |
-| 1. Domain model + state machine | NEXT | |
-| 2. Intake API | todo | |
+| 1. Domain model + state machine | DONE | schema, migration, transition() + guards, walk script |
+| 2. Intake API | NEXT | |
 | 3. Worker + extraction | todo | |
 | 4. Mock providers + callbacks | todo | |
 | 5. Approval, MID, bank change | todo | |
@@ -75,6 +75,19 @@ These come from the kickoff prompt and override or refine PLAN.md:
   `.env`: `API_PORT`, `PROVIDER_BASE_URL`, `WEBHOOK_SECRET`.
   DEMO_MODE (default true): verification timeout 30s, backoff base 1s
   (non-demo: 15 min / 60s). Thresholds: confidence 0.8, risk 70.
+- DB: `api/src/db/schema.ts` (Drizzle), migrations in `api/drizzle/`
+  (`npm run db:generate -w api` after schema edits, `npm run db:migrate -w api`
+  applies to DB_PATH). `openDb(path)` in `api/src/db/client.ts` migrates on open;
+  tests use `openDb(':memory:')`. Timestamps are epoch ms integers from an
+  injected `now`; booleans are 0/1; JSON columns are text (`mode: 'json'`).
+- Domain vocabulary (statuses, `ALLOWED_TRANSITIONS`, `canTransition`, actors,
+  `AUDIT_EVENTS`, verification kinds, `REQUIRED_CHECKS`) lives in
+  `shared/src/domain.ts` so web can use it. New audit event names go there.
+- `transition(db, appId, to, {actor, event, detail?, now?})` in
+  `api/src/domain/transition.ts` (db is passed explicitly, not a module global).
+  Guards keyed by target state in `api/src/domain/guards.ts`.
+  `createApplication(db, input, {now, id})` in `api/src/domain/applications.ts`
+  is the only other place a status is set (the initial SUBMITTED + audit row).
 - Errors: `api/src/errors.ts` (`AppError`, `NotFoundError`, `BadRequestError`,
   `ConflictError`, `IllegalTransitionError`, `GuardError`). Central handler in
   `api/src/http/errorHandler.ts`.
@@ -88,6 +101,17 @@ These come from the kickoff prompt and override or refine PLAN.md:
   root `plan.md` / `problem-statement.txt`, which stay gitignored).
 - `callback_events` schema differs (see decision 1).
 - Root `vitest` also runs a `web` project (no tests yet, `passWithNoTests`).
+- `transition()` takes `db` as its first argument (plan signature omits it).
+- The APPROVED guard (decision 4) is implemented in Phase 1, not stubbed:
+  for each of PAN/GST/BANK/RISK the latest non-superseded attempt must be
+  PASSED, and BANK must match the current `bank_version`. Phase 5 only needs
+  to bump `bank_version` / set `superseded` on bank change.
+- Extra columns: `documents.payload` (JSON body of structured docs),
+  `verifications.score` (risk score), `review_tasks.note`,
+  `jobs.created_at/updated_at`. `audit_log.from_state` is null for the creation
+  row; `to_state` may be null for non-transition events (LATE_CALLBACK etc.).
+- `callback_events.application_id` is not a foreign key (unknown refs are
+  still recorded).
 
 ## Log
 
@@ -122,5 +146,35 @@ containing a PAN -> `400 Malformed JSON body`, log line contains no raw PAN.
 Local-only change: `.env` `WEBHOOK_URL` updated from `/webhooks` to
 `/webhooks/provider` to match PLAN Phase 4.
 
-Next: Phase 1 — Drizzle schema + migration, `transition()` with
-ALLOWED_TRANSITIONS and audit row in one DB transaction, tests first.
+### Phase 1: Domain model and state machine — DONE (2026-11-20)
+
+Done (commits 1.1-1.4):
+- Shared domain enums + `ALLOWED_TRANSITIONS` (17 edges) with shape tests
+  (all states present, no self-loops, only MERCHANT_CREATED/REJECTED terminal,
+  everything reachable from SUBMITTED).
+- Drizzle schema for 8 tables + `0000_init.sql`; partial unique index
+  `callback_events_event_id_uq ON (event_id) WHERE is_duplicate = 0` tested.
+- `transition()`: one IMMEDIATE transaction; map check, guard, compare-and-set
+  update (`WHERE id = ? AND status = from`), audit insert.
+- Tests written first (red on missing modules, then green): all 17 legal edges,
+  all 83 illegal edges with DB snapshot unchanged (11 named), APPROVED guard
+  (no checks, one failed, newer attempt pending, stale bank_version,
+  superseded), rollback when audit insert fails (SQLite trigger), creation
+  audit row, contiguous full-walk trail. Mutation-checked: disabling the map
+  check fails 13 tests, dropping the audit insert fails 19.
+- `scripts/walk.ts` (in-memory DB unless `WALK_DB` set): walks SUBMITTED ->
+  MERCHANT_CREATED, shows the guard blocking APPROVED before checks pass,
+  prints a 6-row audit table.
+
+Test results (`npm test`):
+```
+ Test Files  8 passed (8)
+      Tests  71 passed (71)
+```
+Checks: `npm run db:migrate -w api` creates all 8 tables in `api/data/app.db`
+(re-run is a no-op); `npx tsx scripts/walk.ts` prints the full trail;
+`tsc --noEmit` clean for api and shared; status-writer grep shows only
+`transition.ts`.
+
+Next: Phase 2 — intake API (`POST/GET/PATCH /applications`), wire `openDb`
+into `createApp`, sample payloads in `/sample-data`.
