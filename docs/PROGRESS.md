@@ -16,8 +16,8 @@ from these two files alone.
 | 4. Mock providers + callbacks | DONE | signed async callbacks, idempotent webhook, evaluate, timeouts/retries, late reconciliation |
 | 5. Approval, MID, bank change | DONE | approve job, review endpoint, create_merchant + MID service, bank change |
 | 6. UI | DONE | all six pages; demo script verified through the Vite proxy, not clicked in a browser |
-| 7. Stretch | NEXT | cut first if behind |
-| 8. Hardening, docs, demo | todo | |
+| 7. Stretch | DONE | all four: blur + OCR, duplicates, dead-letter view, PDF text |
+| 8. Hardening, docs, demo | NEXT | |
 
 ## Standing decisions (resolved plan gaps — follow these)
 
@@ -272,6 +272,61 @@ These come from the kickoff prompt and override or refine PLAN.md:
   packages. npm 11 gates install scripts: `allowScripts` in root package.json
   approves better-sqlite3 and esbuild.
 
+- Document reading (Phase 7): `api/src/extraction/read.ts`
+  `readUploadedDocuments(docs, {ocr, blurThreshold})` runs in the extract job
+  before its transaction (never in a request). Uploads without a payload:
+  `.png/.jpg/.jpeg` -> `blurScore()` (`blur.ts`: sharp greyscale, resize to
+  <=1000px wide, 3x3 Laplacian convolve, variance); below
+  `config.thresholds.blur` (`BLUR_THRESHOLD`, default 30) -> blurry, no OCR;
+  else OCR via `OcrEngine` (`ocr.ts`, `createTesseractOcr({cacheDir})`, lazy
+  worker, model in `OCR_CACHE_DIR` default `api/.ocr-cache/`, gitignored).
+  `.pdf` -> `pdfText()` (`pdf.ts`, pdf-parse v2, first 5 pages). Text ->
+  `parseDocumentText(type, text)` (`text.ts`: PAN/GSTIN/IFSC by pattern,
+  names and account number by label) -> same payload keys as JSON docs.
+  `extractFields` takes `doc.reading`: field confidence = reading confidence
+  (OCR mean confidence, PDF 0.95); value not found in a file ->
+  `low_confidence`/`unreadable` (not `missing`). Blurry -> fields
+  `low_confidence`/`blurry` + `result.blurryDocuments`. Decision order:
+  missing -> BLURRY_DOCUMENT -> DOC_CONFLICT -> LOW_CONFIDENCE.
+  `documents.blur_score` is written in the extraction transaction. Corrupt
+  image/PDF, missing file, no text layer -> unreadable (no retry); an OCR
+  engine error throws (worker retry). `createJobHandlers({ocr})`; without
+  it an image that passes the blur check fails the job. `index.ts` creates
+  one engine and terminates it on shutdown.
+- Test fixtures: `api/src/extraction/testkit.ts` (`fakeOcr`,
+  `PAN_SHARP_OCR_TEXT`, `textPdf(lines)` hand-built PDF writer). The real
+  tesseract test in `ocr.flow.test.ts` runs only when
+  `api/.ocr-cache/eng.traineddata` exists or `OCR_E2E=1`.
+- Sample files: `npx tsx scripts/generate-sample-images.mts` writes
+  `pan-sharp.png` (blur ~990), `pan-blurry.png` (~1.7), `gst-cert.pdf`,
+  `bank-proof.pdf` for `sample-data/ocr-pan.json` (Sunrise Traders,
+  PAN AAFCS4321M). Deterministic output.
+- Duplicates: `api/src/domain/duplicates.ts` `flagDuplicates(tx, app, now)`
+  inside `submitApplication`'s transaction. Normalized (codes upper-case no
+  whitespace, account digits only, applied in SQL to stored rows) PAN, GSTIN,
+  or account + IFSC vs every other application (any status, rejected
+  included) -> one `POSSIBLE_DUPLICATE` task per match (max 5) on the new
+  app with `review_tasks.related_application_id` (migration `0003`), audit
+  `POSSIBLE_DUPLICATE` (to_state null, detail `{related_application_id,
+  matched_on}`) on both apps. PATCH does not re-check.
+- `runApprove`: an open POSSIBLE_DUPLICATE task holds auto-approval
+  (VERIFIED -> IN_REVIEW, event `POSSIBLE_DUPLICATE`, no new task); high
+  risk still adds its HIGH_RISK task. Resolution `DISMISS` (shared
+  `INFORMATIONAL_TASK_REASONS`, any state but IN_REVIEW, no transition,
+  audit `REVIEW_TASK_DISMISSED`; other reasons -> 409 `NOT_DISMISSIBLE`).
+  `resolutionsFor(status, taskReason)` (shared) drives the UI buttons;
+  `ReviewActions` takes `taskReason`.
+- Dead letters: `api/src/jobs/deadLetter.ts` (`listDeadJobs`, `requeueJob`),
+  routes `api/src/http/routes/jobs.ts`: `GET /jobs?status=dead` (only
+  `dead` accepted), `POST /jobs/:id/requeue` (dead -> queued, attempts 0,
+  run_at now; 409 not dead, 404, 400). Audit `JOB_REQUEUED` (operator) and
+  the job's JOB_DEAD task resolved `REQUEUED` (matched by the worker's note
+  prefix `Job <type> #<id> failed`). `toDeadJobDto` in `http/dto.ts` masks
+  the payload. Web `/dead-letters` page (`pages/DeadLetters.tsx`); review
+  tasks show `TaskLinks` (related app / dead-letter link).
+- New audit events: `BLURRY_DOCUMENT`, `POSSIBLE_DUPLICATE`,
+  `REVIEW_TASK_DISMISSED`, `JOB_REQUEUED`.
+
 ## Deviations from PLAN.md
 
 - Plan docs live at `docs/PLAN.md` / `docs/PROBLEM.md` (copied from the
@@ -331,6 +386,18 @@ These come from the kickoff prompt and override or refine PLAN.md:
   until they become `dead`.
 - Known gap: a job left `running` by a process crash is never reclaimed.
   Add a reaper (running and `updated_at` older than N) if it matters.
+- Phase 7: BLURRY_DOCUMENT goes to IN_REVIEW (as asked), after the missing
+  check (an incomplete app still goes to NEEDS_INFO first). PATCH cannot
+  replace an uploaded file yet, so "re-upload" means operator handling.
+- Phase 7: OCR/PDF parsers cover all three document types (the plan only
+  asked for PAN + name from the PAN card) because the PDF path needs them.
+  Scanned PDFs (no text layer) are not rasterized for OCR.
+- Phase 7: duplicates hold auto-approval (not in the plan, which only says
+  "create a review task"); otherwise a duplicate would auto-approve to a MID
+  before anyone looked at the task. Submission itself is never blocked.
+- Phase 7: tesseract.js downloads its English model (~10 MB) on first use;
+  an offline machine with no cache fails extract jobs for images that pass
+  the blur check (retried, then dead-lettered, requeueable).
 
 ## Log
 
@@ -616,3 +683,53 @@ Demo notes:
   message is visible on Approve until the BANK v2 callback lands.
 - Push from this session failed (no GitHub credentials in the shell); push
   manually.
+
+### Phase 7: Stretch — DONE (2026-11-21)
+
+Time check before starting: 24-hour plan, started 2026-11-20 21:10, about
+3h elapsed at the end of Phase 6, so well ahead. All four items done, in
+order (commits 7.1-7.4):
+1. Blur + OCR: Laplacian-variance blur score (threshold 30, calibrated on
+   generated `pan-sharp.png` 989.7 vs `pan-blurry.png` 1.7; Gaussian blur
+   sigma 2 scores 49.6, sigma 3 12.7, where tesseract confidence drops to
+   0.82). Below threshold -> IN_REVIEW `BLURRY_DOCUMENT`. tesseract.js reads
+   PAN + name in the extract job; confidence = OCR confidence; existing
+   conflict / low-confidence rules apply.
+2. Duplicate detection at submit -> `POSSIBLE_DUPLICATE` task linking both
+   apps; non-blocking; holds auto-approval; `DISMISS` resolution.
+3. Dead-letter view: `GET /jobs?status=dead`, `POST /jobs/:id/requeue`,
+   web page with Requeue button.
+4. PDF text via pdf-parse into the same extractors (confidence 0.95).
+
+Test results (`npm test`, with the tesseract model cached so the real-OCR
+test ran):
+```
+ Test Files  31 passed (31)
+      Tests  401 passed (401)
+```
+New tests: `blur.test.ts` (calibration, monotonic, resolution/JPEG,
+blank, non-image), `text.test.ts`, `read.test.ts` (images + PDFs),
+`extract.test.ts` OCR rules, `ocr.flow.test.ts` (HTTP upload -> worker:
+OCR not in request, blurry, sharp, conflict, low confidence, OCR outage,
+PDFs, scanned PDF, real tesseract), `duplicates.test.ts` (normalization,
+each key, IFSC required, multiple/rejected matches, samples never collide,
+DTO + queue, approve hold, DISMISS rules), `deadLetter.test.ts` (masking,
+requeue, task resolution, retry budget, 409/404/400).
+`npm run typecheck` clean; `vite build` clean.
+
+Verified live (api + mock-providers via tsx, scratch DB, curl):
+- ocr-pan form + `pan-sharp.png`: blur 989.71, real OCR fields at 0.94 ->
+  MERCHANT_CREATED with MID.
+- Same + `pan-blurry.png`: blur 1.68 -> IN_REVIEW, BLURRY_DOCUMENT task
+  "PAN_CARD (blur score 1.68 < threshold 30)", plus POSSIBLE_DUPLICATE
+  linking the first app.
+- All three documents as files (PNG + 2 PDFs): PDF fields at 0.95 ->
+  verification passes -> held in IN_REVIEW by two POSSIBLE_DUPLICATE tasks.
+- Mock providers stopped, gst-fail.json submitted: start_verifications
+  dead after 5 attempts, listed by `GET /jobs?status=dead`; mock restarted,
+  requeue -> queued/attempts 0 (second requeue 409) -> verifications ran ->
+  IN_REVIEW PAN_OK_GST_FAILED; JOB_DEAD task RESOLVED/REQUEUED.
+- No raw PAN/account in the API log.
+
+Not verified: the new UI (Dead letters page, Dismiss button, related-app
+links) in a real browser; it typechecks and builds.
