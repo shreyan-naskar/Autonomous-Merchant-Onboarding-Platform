@@ -12,8 +12,8 @@ from these two files alone.
 | 0. Setup | DONE | deps, Vitest, config, error handler, masking |
 | 1. Domain model + state machine | DONE | schema, migration, transition() + guards, walk script |
 | 2. Intake API | DONE | POST/GET/PATCH /applications, masking layer, sample-data |
-| 3. Worker + extraction | NEXT | |
-| 4. Mock providers + callbacks | todo | |
+| 3. Worker + extraction | DONE | worker, validators, extract job, decision, NEEDS_INFO re-entry |
+| 4. Mock providers + callbacks | NEXT | |
 | 5. Approval, MID, bank change | todo | |
 | 6. UI | todo | |
 | 7. Stretch | todo | cut first if behind |
@@ -107,6 +107,41 @@ These come from the kickoff prompt and override or refine PLAN.md:
 - Errors: `api/src/errors.ts` (`AppError`, `NotFoundError`, `BadRequestError`,
   `ConflictError`, `IllegalTransitionError`, `GuardError`). Central handler in
   `api/src/http/errorHandler.ts`.
+- Worker (Phase 3): `api/src/jobs/worker.ts`. `runDueJobsOnce(deps, now)`
+  claims with one `UPDATE jobs SET status='running', attempts=attempts+1
+  WHERE status='queued' AND id IN (due) RETURNING`, so `attempts` counts the
+  try at claim time. Handler signature `(payload, {db, config, logger, now,
+  job})`; throw to fail. Retry delay `backoffBaseMs * 2^(attempts-1)`; at
+  `max_attempts` -> `dead` + review task `JOB_DEAD` + audit `JOB_DEAD`; each
+  retryable failure writes audit `JOB_FAILED` (to_state null). Unknown job
+  type -> dead immediately. Errors are `redactText()`ed before storage.
+  `startWorker(deps, {now, intervalMs})` wraps it in a non-overlapping
+  `setInterval`; started from `api/src/index.ts`. Registry:
+  `createJobHandlers()` in `api/src/jobs/handlers.ts` (Phase 4 replaces the
+  `start_verifications` stub there). In tests, drive with a `drain()` loop
+  over `runDueJobsOnce` (see `api/src/extraction/flow.test.ts`).
+- `transition(db | tx, ...)`: pass a transaction to make the move atomic with
+  other writes (drizzle runs it as a savepoint).
+- Validators: `shared/src/validators.ts` (`isValidPan/Gstin/Ifsc/BankAccount`,
+  `gstinMatchesPan`, `normalizeName`, `nameSimilarity` = max(token Jaccard,
+  Levenshtein ratio) over normalized names, `namesMatch`). Config
+  `NAME_MATCH_THRESHOLD` (default 0.85) -> `config.thresholds.nameMatch`.
+- Extraction: `api/src/extraction/extract.ts` (pure `extractFields`),
+  `decide.ts` (pure `decideAfterExtraction`), `job.ts` (`runExtraction`, the
+  DB side). Field names: PAN_CARD -> `pan`, `name`; GST_CERT -> `gst`,
+  `legal_name`; BANK_PROOF -> `bank_account`, `ifsc`, `account_holder`.
+  Per-field rule (first wins): absent -> `missing` (0); upload without
+  payload -> `low_confidence` (0, `unreadable`); bad format ->
+  `low_confidence` (0.5); differs from form / GSTIN not embedding PAN / name
+  similarity < threshold -> `mismatch` (1.0); else `ok` (1.0). Required:
+  all three documents and form `pan`, `gst`, `bank_account`, `ifsc`.
+  Missing-list labels: `form.<field>`, `document.<TYPE>`, `<TYPE>.<payload key>`.
+  Decision order: missing -> NEEDS_INFO (`INFO_REQUIRED`), mismatch ->
+  IN_REVIEW `DOC_CONFLICT`, confidence < threshold -> IN_REVIEW
+  `LOW_CONFIDENCE`, else VERIFYING (`VERIFICATION_STARTED`) + enqueue
+  `start_verifications`. Fields + transition + review task + next job are one
+  transaction; SUBMITTED -> EXTRACTING commits first so a retry resumes from
+  EXTRACTING. Extract jobs for apps in any other state are no-ops.
 - better-sqlite3 13.2 builds/loads on this Fedora machine with no extra system
   packages. npm 11 gates install scripts: `allowScripts` in root package.json
   approves better-sqlite3 and esbuild.
@@ -137,6 +172,16 @@ These come from the kickoff prompt and override or refine PLAN.md:
   PATCH writes audit `APPLICATION_UPDATED` (new event; from_state = current,
   to_state null) and returns 409 in APPROVED, MERCHANT_*, REJECTED. It does
   not bump `bank_version` yet (Phase 5).
+
+- Phase 3: PATCH also accepts structured `documents` (replace-by-type),
+  only in NEEDS_INFO (409 elsewhere). In NEEDS_INFO any real change is one
+  transaction: fields/docs + NEEDS_INFO -> EXTRACTING (actor merchant, event
+  `INFO_SUPPLIED`, detail `{fields, documents}`) + new `extract` job; no
+  separate APPLICATION_UPDATED row. A no-op PATCH does not move the app.
+- `jobs.status = 'failed'` is unused: failed attempts go back to `queued`
+  until they become `dead`.
+- Known gap: a job left `running` by a process crash is never reclaimed.
+  Add a reaper (running and `updated_at` older than N) if it matters.
 
 ## Log
 
@@ -238,3 +283,37 @@ Next: Phase 3. Worker loop (`runDueJobsOnce(now)`), `extract` job mapping
 document payloads to `extracted_fields` (use field names `pan`, `gst`,
 `bank_account`, `name`, `ifsc`), validators (tests first), then the decision
 step. Expected outcomes are listed in `sample-data/README.md`.
+
+### Phase 3: Worker and extraction/validation — DONE (2026-11-20)
+
+Done (commits 3.1-3.4):
+- Validators in shared, tests first (red on missing module, then green).
+- Worker: atomic claim, handler registry, exponential backoff, dead-letter
+  with review task + audit, non-overlapping `startWorker`, graceful shutdown
+  on SIGINT/SIGTERM. Tests use an injected clock: backoff schedule
+  (1s/2s/4s, not due 1ms early), dead at max_attempts, recovery on retry,
+  no-handler dead-letter, PAN masking in stored errors, fake-timer interval.
+- `extract` job + pure decision; `start_verifications` stub handler.
+- PATCH in NEEDS_INFO -> EXTRACTING -> re-extract.
+
+Mutation checks: backoff exponent off by one fails 3 tests; `>` instead of
+`>=` for dead fails 2; skipping the missing rule fails 7; not enqueueing
+start_verifications fails 1; PATCH not re-enqueueing extract fails 3.
+
+Test results (`npm test`):
+```
+ Test Files  14 passed (14)
+      Tests  217 passed (217)
+```
+Checks: live server (PORT 3999, scratch DB) with all four samples:
+happy -> VERIFYING, gst-fail -> VERIFYING, conflict -> IN_REVIEW
+(`DOC_CONFLICT`, name similarity 0.318), missing -> NEEDS_INFO
+(`missing: ["document.GST_CERT"]`); PATCHing the GST certificate moved it
+EXTRACTING -> VERIFYING within one poll. Server log contained no raw PAN or
+account. `npm run typecheck` clean; status-writer grep shows only
+`transition.ts` (other hits are `jobs.status`).
+
+Next: Phase 4. Mock provider endpoints + HMAC callbacks, real
+`start_verifications` handler (replace the stub in `jobs/handlers.ts`),
+`POST /webhooks/provider` with idempotent `callback_events`, `evaluate()`,
+`verification_timeout` job.
