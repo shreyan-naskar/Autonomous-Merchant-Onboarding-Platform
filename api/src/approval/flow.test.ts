@@ -18,13 +18,12 @@ import { createSimulatedMerchantService } from '../merchant/service.js';
 import { createHttpProviderClient } from '../providers/client.js';
 
 /*
- * Phase 5 "Done when", end to end: API + mock providers in-process on random
- * ports, real HTTP both ways, worker driven on a fake clock, mock callbacks on
- * virtual time. The merchant service instance is shared by the API (admin
- * failure flag) and the worker, as in index.ts.
+ * Approval, merchant ID creation and bank changes over real HTTP. One merchant
+ * service instance is shared by the API (failure flag) and the worker, as in
+ * index.ts.
  */
 
-const SECRET = 'phase5-secret';
+const SECRET = 'approval-test-secret';
 const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
 const T0 = 1_700_000_000_000;
@@ -115,7 +114,7 @@ const review = (id: string, taskId: number, resolution: string, note = 'checked 
 const openTask = (d: ApplicationDetailDto, reason: string) => d.review_tasks.find((t) => t.reason === reason && t.status === 'OPEN')!;
 const transitions = (d: ApplicationDetailDto) => d.audit_log.filter((a) => a.to_state !== null).map((a) => `${a.to_state} ${a.actor} ${a.event}`);
 
-describe('Phase 5 end to end', () => {
+describe('approval and merchant ID creation', () => {
   it('happy.json ends at MERCHANT_CREATED with a MID', async () => {
     const id = await toVerified();
     await drain();

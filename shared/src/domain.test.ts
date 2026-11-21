@@ -36,7 +36,7 @@ describe('ALLOWED_TRANSITIONS', () => {
     expect([...seen].sort()).toEqual([...APPLICATION_STATUSES].sort());
   });
 
-  it('canTransition matches the plan edges', () => {
+  it('canTransition allows the documented edges and nothing else', () => {
     expect(canTransition('SUBMITTED', 'EXTRACTING')).toBe(true);
     expect(canTransition('MERCHANT_CREATION_FAILED', 'APPROVED')).toBe(true);
     expect(canTransition('SUBMITTED', 'APPROVED')).toBe(false);

@@ -1,5 +1,5 @@
 /*
- * Generates the sample document files in sample-data/ (Phase 7):
+ * Generates the sample document files in sample-data/:
  *   pan-sharp.png   a clean, synthetic PAN card (OCR-readable)
  *   pan-blurry.png  the same card with a Gaussian blur (fails the blur check)
  *   gst-cert.pdf    a text-layer GST certificate (pdf-parse, no OCR)

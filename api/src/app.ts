@@ -23,7 +23,7 @@ export interface AppDeps {
    * toggles. Pass the same instance to createJobHandlers so the worker sees it.
    */
   merchantService?: SimulatedMerchantService;
-  /** Hook for tests / later phases to mount extra routers before the 404 handler. */
+  /** Lets tests mount extra routes before the 404 handler. */
   mount?: (app: Express) => void;
 }
 

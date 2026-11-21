@@ -5,11 +5,9 @@ import type { Db } from '../db/client.js';
 import type { Tx } from './guards.js';
 
 /*
- * Duplicate detection at submit (Phase 7.2). A new application whose
- * normalized PAN, GSTIN, or bank account + IFSC matches another application
- * gets one POSSIBLE_DUPLICATE review task per match, linking the two. It does
- * not block submission; the approve step holds auto-approval while such a
- * task is open (see approval/approve.ts).
+ * Duplicate detection at submit: a normalized PAN, GSTIN or account + IFSC
+ * match opens a POSSIBLE_DUPLICATE task linking the two applications. It never
+ * blocks submission; approve.ts holds auto-approval while the task is open.
  */
 
 export type DuplicateKey = 'pan' | 'gst' | 'bank';

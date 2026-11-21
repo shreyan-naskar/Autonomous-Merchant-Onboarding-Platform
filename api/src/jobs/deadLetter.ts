@@ -4,10 +4,7 @@ import type { Db } from '../db/client.js';
 import { applications, auditLog, jobs, reviewTasks } from '../db/schema.js';
 import { ConflictError, NotFoundError } from '../errors.js';
 
-/*
- * Dead-letter queue (Phase 7.3): jobs with status `dead` (attempts exhausted
- * or no handler), listed for the operator and requeued on demand.
- */
+/* The dead-letter queue: jobs with status `dead` (retries exhausted or no handler), listed and requeued by an operator. */
 
 export type JobRow = typeof jobs.$inferSelect;
 

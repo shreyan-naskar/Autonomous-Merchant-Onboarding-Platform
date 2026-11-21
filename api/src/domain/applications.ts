@@ -122,7 +122,7 @@ export interface ApplicationPatch extends Partial<NewApplicationInput> {
 const BANK_REVERIFY_STATES: readonly ApplicationStatus[] = ['VERIFYING', 'VERIFIED', 'IN_REVIEW'];
 
 /**
- * Bank details changed after verification started (Plan gaps resolved, item 5).
+ * Bank details changed after verification started.
  * Bumps bank_version and supersedes every BANK row, so the approval guard
  * blocks until BANK passes for the new version and old-version callbacks are
  * STALE. Then re-runs BANK only:

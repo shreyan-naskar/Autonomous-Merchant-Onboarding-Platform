@@ -13,7 +13,7 @@ import { signBody } from './http/signature.js';
 import { createLogger } from './logger.js';
 
 /*
- * Phase 8 security pass, as tests so it stays true:
+ * Security invariants, kept as tests:
  *  1. transition() is the only writer of applications.status.
  *  2. No raw PAN / GSTIN / bank account in logs or API responses over full
  *     flows (debug-level logs captured).

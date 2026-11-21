@@ -18,11 +18,9 @@ import { createLogger } from '../logger.js';
 import { createHttpProviderClient } from '../providers/client.js';
 
 /*
- * Phase 4 "Done when": the API and the mock providers both run in-process on
- * random ports and talk over real HTTP (provider requests one way, signed
- * callbacks the other). The API worker is driven with runDueJobsOnce on a
- * fake clock; the mock's callbacks run on a manual (virtual-time) scheduler.
- * No sleeps.
+ * Verification over real HTTP: API and mock providers in-process on random
+ * ports, signed callbacks, the worker on a fake clock and the mock's callbacks
+ * on a virtual-time scheduler. No sleeps.
  */
 
 const SECRET = 'flow-test-secret';
@@ -155,7 +153,7 @@ describe('verification with the mock providers', () => {
     // No raw PAN, GSTIN or account number anywhere in the response.
     expect(JSON.stringify(d)).not.toMatch(/AABCL1234K|50100234567891/);
 
-    // Later timeouts find nothing pending; the approve and create_merchant jobs run (Phase 5).
+    // Later timeouts find nothing pending; approve and create_merchant run.
     clock += TIMEOUT;
     await drain();
     d = await detail(id);

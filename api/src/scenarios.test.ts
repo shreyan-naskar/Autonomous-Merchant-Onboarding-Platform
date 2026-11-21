@@ -8,7 +8,7 @@ import { events, openTask, sample, sampleFile, startE2E, type E2E } from './e2e.
  * end to end: API + mock providers in-process on random ports, real HTTP and
  * signed callbacks both ways, the worker on a fake clock, callbacks on
  * virtual time (see e2e.ts). Listed in README.md ("Failure scenarios"). Each
- * scenario is also covered in more detail by the phase test files.
+ * scenario is also covered in more detail next to the code it exercises.
  */
 
 let e: E2E;

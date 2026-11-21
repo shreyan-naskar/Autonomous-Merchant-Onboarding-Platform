@@ -16,9 +16,8 @@ import { createLogger } from '../logger.js';
 import { createFakeProviderClient } from '../providers/fake.js';
 
 /*
- * Phase 3 "Done when": submit each sample over HTTP, let the worker run, and
- * check where it lands. Providers are the in-memory fake (no callbacks), so
- * VERIFYING is as far as these go; see verification/flow.test.ts for more.
+ * Extraction outcomes per sample, over HTTP with the worker. Providers are the
+ * in-memory fake (no callbacks), so VERIFYING is as far as these go.
  */
 
 const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
@@ -147,7 +146,7 @@ describe('extraction flow with the worker', () => {
     });
   });
 
-  it('gst-fail.json passes extraction (the provider fails it in Phase 4)', async () => {
+  it('gst-fail.json passes extraction (only the GST provider rejects it)', async () => {
     const id = await submit(sample('gst-fail.json'));
     await drain();
     expect((await get(id)).status).toBe('VERIFYING');

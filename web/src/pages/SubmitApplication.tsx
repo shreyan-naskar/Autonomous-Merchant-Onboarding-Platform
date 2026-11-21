@@ -33,7 +33,7 @@ const SAMPLE_INFO: Record<string, { title: string; text: string }> = {
   'missing.json': { title: 'Missing document', text: 'No GST certificate: the merchant is asked for it.' },
   'high-risk.json': { title: 'High risk', text: 'Checks pass, risk score 85: a person must approve.' },
   'low-confidence.json': { title: 'Unclear value', text: 'The bank proof shows an invalid IFSC: goes to review.' },
-  'ocr-pan.json': { title: 'Upload a PAN card', text: 'Add pan-sharp.png (or pan-blurry.png) as the PAN card in step 2.' },
+  'ocr-pan.json': { title: 'Upload a PAN card', text: 'Add pan-sharp.png (or pan-blurry.png) as the PAN card in the Documents step.' },
 }
 
 const FIELDS = [

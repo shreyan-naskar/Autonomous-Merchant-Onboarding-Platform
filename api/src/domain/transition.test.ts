@@ -74,7 +74,7 @@ const ILLEGAL_EDGES = APPLICATION_STATUSES.flatMap((from) =>
 );
 
 describe('transition(): legal edges', () => {
-  it('covers all 17 plan edges', () => {
+  it('has exactly 17 legal edges', () => {
     expect(LEGAL_EDGES).toHaveLength(17);
   });
 

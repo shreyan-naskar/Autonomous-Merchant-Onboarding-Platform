@@ -211,7 +211,7 @@ api/              Express API, worker, extraction, state machine (src/), migrati
 mock-providers/   Simulated PAN/GST/bank/risk services with chaos settings
 web/              React operator + merchant UI
 shared/           Zod schemas, domain vocabulary, validators, masking
-scripts/          demo.ts, walk.ts (state machine walk), generate-sample-images.mts
+scripts/          demo.ts, generate-sample-images.mts
 sample-data/      JSON payloads, PAN card images, GST/bank PDFs (all synthetic)
 docs/             PROBLEM.md, PLAN.md, PROGRESS.md, DEMO.md
 ```

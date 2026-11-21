@@ -6,7 +6,7 @@ import { z } from 'zod';
  * account number back to the caller (or into logs).
  */
 
-// Format rules, reused by the Phase 3 validators.
+// Format rules, shared with the extraction validators.
 export const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 /** 2-digit state code, PAN, entity number, 'Z', checksum. */
 export const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -46,8 +46,8 @@ export type ApplicationFields = z.infer<typeof ApplicationFieldsSchema>;
 // ---------------------------------------------------------------------------
 // Structured documents. Payload values are what the document "says"; they are
 // deliberately loose (any short string) because checking them against formats
-// and the form is the extraction step's job (Phase 3), which turns problems
-// into review outcomes instead of 400s.
+// and the form is extraction's job, which turns problems into review
+// outcomes instead of 400s.
 
 const docValue = z.string().trim().min(1, 'Must not be empty').max(200, 'Must be at most 200 characters').optional();
 

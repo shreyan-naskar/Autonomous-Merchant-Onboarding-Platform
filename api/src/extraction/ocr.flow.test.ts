@@ -16,10 +16,7 @@ import { createFakeProviderClient } from '../providers/fake.js';
 import { createTesseractOcr } from './ocr.js';
 import { fakeOcr, PAN_SHARP_OCR_TEXT, textPdf } from './testkit.js';
 
-/*
- * Phase 7.1 end to end: upload a PAN card image over HTTP, let the worker's
- * extract job run the blur check and OCR, and check where the app lands.
- */
+/* Uploaded images and PDFs, end to end: HTTP upload, then the worker's extract job (blur check, OCR, PDF text). */
 
 const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 const form = JSON.parse(readFileSync(join(SAMPLE_DIR, 'ocr-pan.json'), 'utf8'));

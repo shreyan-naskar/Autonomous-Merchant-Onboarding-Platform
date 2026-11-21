@@ -130,7 +130,7 @@ describe('no raw PAN / GSTIN / bank account in any response JSON', () => {
     const id = (await create()).body.id as string;
     const docId = db.select().from(documents).all()[0]!.id;
 
-    // Populate every section with raw values the way later phases will.
+    // Raw values in every section, to prove the response masks all of them.
     db.insert(extractedFields)
       .values([
         { applicationId: id, documentId: docId, field: 'pan', value: RAW.pan, confidence: 1, validationStatus: 'ok' },

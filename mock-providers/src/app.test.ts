@@ -124,10 +124,6 @@ describe('mock providers', () => {
     await sched.advance(10_000);
     expect(sent).toHaveLength(0);
   });
-
-  it('the Phase 0 placeholder GET /api/pan/verify is gone', async () => {
-    expect((await request(app).get('/api/pan/verify')).status).toBe(404);
-  });
 });
 
 describe('chaos settings', () => {
