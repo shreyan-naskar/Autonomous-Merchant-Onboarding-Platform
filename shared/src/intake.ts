@@ -12,11 +12,15 @@ export const DOCUMENT_TYPES = ['PAN_CARD', 'GST_CERT', 'BANK_PROOF'] as const;
 export const DocumentTypeSchema = z.enum(DOCUMENT_TYPES);
 export type DocumentType = z.infer<typeof DocumentTypeSchema>;
 
+/** PDFs (text layer, or scanned pages OCR'd) and the image formats the API decodes for OCR. */
 export const UPLOAD_MIME_TYPES = {
   'application/pdf': '.pdf',
   'image/png': '.png',
   'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'image/tiff': '.tiff',
 } as const;
+export const UPLOAD_FORMATS_LABEL = 'PDF, PNG, JPEG, WebP or TIFF';
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 

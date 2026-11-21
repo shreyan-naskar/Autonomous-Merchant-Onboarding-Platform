@@ -67,7 +67,11 @@ export function cleanName(raw: string): string | null {
   return name.replace(/[^A-Za-z]/g, '').length >= 3 ? name : null;
 }
 
-const firstName = (candidates: string[]) => candidates.map(cleanName).find((n): n is string => n !== null);
+/** The next line is a fallback candidate; when the value itself is unreadable (or redacted) it is usually the next label. */
+const LABEL_WORD = /^(?:registration|details|name|number|date|address|trade|type|constitution|certificate|account|branch|ifsc|pan|gstin|customer|father'?s?)$/i;
+
+const firstName = (candidates: string[]) =>
+  candidates.map(cleanName).find((n): n is string => n !== null && !LABEL_WORD.test(n.split(' ')[0]!));
 
 const firstMatch = (text: string, re: RegExp) => text.toUpperCase().match(re)?.[0];
 

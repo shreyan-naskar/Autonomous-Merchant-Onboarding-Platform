@@ -1,4 +1,4 @@
-import type { OcrEngine } from './ocr.js';
+import type { OcrEngine, OcrMode } from './ocr.js';
 
 /** Test fixtures for OCR and PDF reading (not imported by production code; also used by scripts/generate-sample-images.mts). */
 
@@ -23,26 +23,79 @@ export function fakeOcr(
   return engine;
 }
 
+/** Objects 1..n of a PDF, in order (object 1 is the catalog). Binary stream data is kept as bytes. */
+function buildPdf(objects: readonly (string | Buffer)[]): Buffer {
+  const parts: Buffer[] = [Buffer.from('%PDF-1.4\n', 'latin1')];
+  let length = parts[0]!.length;
+  const offsets: number[] = [];
+  const push = (b: Buffer) => {
+    parts.push(b);
+    length += b.length;
+  };
+  objects.forEach((body, i) => {
+    offsets.push(length);
+    push(Buffer.from(`${i + 1} 0 obj\n`, 'latin1'));
+    push(typeof body === 'string' ? Buffer.from(body, 'latin1') : body);
+    push(Buffer.from('\nendobj\n', 'latin1'));
+  });
+  let tail = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  tail += offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('');
+  tail += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${length}\n%%EOF\n`;
+  push(Buffer.from(tail, 'latin1'));
+  return Buffer.concat(parts);
+}
+
 /** Wrap a content stream in a minimal one-page PDF (Helvetica as /F1). */
 function pdfWithContent(content: string): Buffer {
-  const objects = [
+  return buildPdf([
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     `<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`,
-  ];
-  let pdf = '%PDF-1.4\n';
-  const offsets: number[] = [];
-  objects.forEach((body, i) => {
-    offsets.push(Buffer.byteLength(pdf, 'latin1'));
-    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
-  });
-  const xref = Buffer.byteLength(pdf, 'latin1');
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  pdf += offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('');
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(pdf, 'latin1');
+  ]);
+}
+
+/**
+ * A scanned document: an A4 page whose only content is a JPEG, drawn
+ * `widthPt` points wide near the top, with no text layer (optionally a typed
+ * header line above it, as some scanners add).
+ */
+export function scannedPdf(jpeg: Buffer, size: { width: number; height: number }, opts: { widthPt?: number; header?: string } = {}): Buffer {
+  const w = opts.widthPt ?? 500;
+  const h = Math.round((w * size.height) / size.width);
+  const esc = (t: string) => t.replace(/[\\()]/g, (c) => `\\${c}`);
+  const header = opts.header ? `BT /F1 10 Tf 50 810 Td (${esc(opts.header)}) Tj ET\n` : '';
+  const content = `${header}q ${w} 0 0 ${h} 50 ${790 - h} cm /Im1 Do Q`;
+  return buildPdf([
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    `<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`,
+    Buffer.concat([
+      Buffer.from(
+        `<< /Type /XObject /Subtype /Image /Width ${size.width} /Height ${size.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`,
+        'latin1',
+      ),
+      jpeg,
+      Buffer.from('\nendstream', 'latin1'),
+    ]),
+  ]);
+}
+
+/** An OcrEngine that answers each call with the next scripted text and records the segmentation mode it was asked for. */
+export function scriptedOcr(texts: readonly string[], confidence = 0.9): OcrEngine & { modes: string[] } {
+  const engine = {
+    modes: [] as string[],
+    async recognize(_image: Buffer, mode: OcrMode = 'auto') {
+      const text = texts[Math.min(engine.modes.length, texts.length - 1)] ?? '';
+      engine.modes.push(mode);
+      return { text, confidence };
+    },
+    async terminate() {},
+  };
+  return engine;
 }
 
 /** A one-page PDF with a Helvetica text layer, one line per entry. Hand-built: no PDF library needed. */

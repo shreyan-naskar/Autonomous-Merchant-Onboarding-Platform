@@ -201,8 +201,10 @@ status, with guards); state diagram in the README.
 
 ### Use multimodal extraction for images or PDFs.
 
-*Implemented by:* blur check (Laplacian variance) + Tesseract OCR for PNG/JPEG,
-PDF text layer (pdfjs) for PDFs, same field rules as JSON.
+*Implemented by:* blur check (Laplacian variance) + Tesseract OCR for PNG, JPEG,
+WebP and TIFF (several preprocessing passes until every field is found); PDF text
+layer (pdfjs) for PDFs, with scanned pages rendered and OCR'd for missing fields;
+same field rules as JSON.
 
 *Demo:*
 1. **Delete all data**. **Submit application** -> **Upload a PAN card** ->

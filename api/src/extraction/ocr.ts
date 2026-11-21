@@ -14,9 +14,12 @@ export interface OcrResult {
   words?: OcrWord[];
 }
 
+/** 'auto': Tesseract finds the layout itself. 'block': the page is one block of text. */
+export type OcrMode = 'auto' | 'block';
+
 /** An interface so tests run without Tesseract. Only the extract job calls it, never a request handler. */
 export interface OcrEngine {
-  recognize(image: Buffer): Promise<OcrResult>;
+  recognize(image: Buffer, mode?: OcrMode): Promise<OcrResult>;
   terminate(): Promise<void>;
 }
 
@@ -39,10 +42,19 @@ export function createTesseractOcr({ cacheDir }: { cacheDir: string }): OcrEngin
     }
     return worker;
   };
+  // The segmentation mode is worker state: serialize so two calls never swap it under each other.
+  let queue: Promise<unknown> = Promise.resolve();
+  const run = async (image: Buffer, mode: OcrMode) => {
+    const w = await getWorker();
+    const { PSM } = await import('tesseract.js');
+    await w.setParameters({ tessedit_pageseg_mode: mode === 'block' ? PSM.SINGLE_BLOCK : PSM.AUTO });
+    return w.recognize(image, {}, { text: true, blocks: true });
+  };
   return {
-    async recognize(image) {
-      const w = await getWorker();
-      const { data } = await w.recognize(image, {}, { text: true, blocks: true });
+    async recognize(image, mode = 'auto') {
+      const job = queue.then(() => run(image, mode));
+      queue = job.catch(() => undefined);
+      const { data } = await job;
       const scale = (c: number) => Math.max(0, Math.min(1, c / 100));
       const words = (data.blocks ?? []).flatMap((b) =>
         b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words.map((wd) => ({ text: wd.text, confidence: scale(wd.confidence) })))),

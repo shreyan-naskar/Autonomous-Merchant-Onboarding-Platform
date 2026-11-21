@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import sharp, { type Sharp } from 'sharp';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { OcrEngine } from './ocr.js';
-import { readUploadedDocuments, valueConfidence, type ReadableDocument } from './read.js';
-import { PDF_TEXT_CONFIDENCE } from './read.js';
-import { fakeOcr, positionedPdf, textPdf, TWO_COLUMN_BANK_PDF_ITEMS } from './testkit.js';
+import { pdfPageImages } from './pdf.js';
+import { PDF_TEXT_CONFIDENCE, readUploadedDocuments, valueConfidence, type ReadableDocument } from './read.js';
+import { fakeOcr, PAN_SHARP_OCR_TEXT, positionedPdf, scannedPdf, scriptedOcr, textPdf, TWO_COLUMN_BANK_PDF_ITEMS } from './testkit.js';
 import { SAMPLE_DIR } from '../testing.js';
 
 const FILES: Record<string, Buffer> = {
@@ -97,9 +98,11 @@ describe('readUploadedDocuments: PDFs (text layer)', () => {
     expect(r.payload).toEqual({ account_number: '60200987654321', ifsc: 'ICIC0004321', account_holder: 'Sunrise Traders Pvt Ltd' });
   });
 
-  it('a PDF without a text layer (scanned) is unreadable: no_text_layer', async () => {
-    const r = (await readUploadedDocuments([doc(1, '/u/scanned.pdf')], opts())).get(1)!;
+  it('a blank PDF (no text layer, nothing on the page) is unreadable without OCR: no_text_layer', async () => {
+    const deps = opts();
+    const r = (await readUploadedDocuments([doc(1, '/u/scanned.pdf')], deps)).get(1)!;
     expect(r).toEqual({ source: 'pdf', payload: null, confidence: 0, error: 'no_text_layer' });
+    expect(deps.ocr.calls).toBe(0);
   });
 
   it('a corrupt PDF is unreadable (not retried): not_a_pdf', async () => {
@@ -135,9 +138,9 @@ describe('field confidence from OCR words (not the page mean)', () => {
     expect(valueConfidence('RAVI SHARMA', words, 0.3)).toBe(0.3);
   });
 
-  it('without word data the page confidence is used (no fieldConfidence)', async () => {
+  it('without word data each field gets the page confidence', async () => {
     const r = (await readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr: fakeOcr(), blurThreshold: 30, readFile })).get(1)!;
-    expect(r.fieldConfidence).toBeUndefined();
+    expect(r.fieldConfidence).toEqual({ pan: 0.94, name: 0.94 });
     expect(r.confidence).toBe(0.94);
   });
 });
@@ -146,5 +149,98 @@ describe('two-column bank statement PDF (labels drawn before values)', () => {
   it('rows rebuilt by position: account number, IFSC (O -> 0) and holder all found', async () => {
     const r = (await readUploadedDocuments([doc(1, '/u/two-column.pdf', { type: 'BANK_PROOF' })], { ocr: fakeOcr(), blurThreshold: 30, readFile })).get(1)!;
     expect(r.payload).toEqual({ account_number: '50100234567891', ifsc: 'HDFC0001234', account_holder: 'RAVI KUMAR' });
+  });
+});
+
+describe('scanned PDFs: pages rendered and OCR\'d', () => {
+  const files: Record<string, Buffer> = {};
+  const readScan = async (p: string) => files[p] ?? readFile(p);
+  beforeAll(async () => {
+    const png = FILES['/u/sharp.png']!;
+    const meta = await sharp(png).metadata();
+    const size = { width: meta.width!, height: meta.height! };
+    const jpeg = await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
+    const blurry = await sharp(png).flatten({ background: '#ffffff' }).blur(8).jpeg().toBuffer();
+    files['/u/scan.pdf'] = scannedPdf(jpeg, size);
+    files['/u/scan-header.pdf'] = scannedPdf(jpeg, size, { header: 'Name: SUNRISE TRADERS PVT LTD' });
+    files['/u/scan-blurry.pdf'] = scannedPdf(blurry, size);
+  });
+
+  it('pdfPageImages renders the page as a PNG with the scan on it', async () => {
+    const [page] = await pdfPageImages(files['/u/scan.pdf']!);
+    const meta = await sharp(page!).metadata();
+    expect(meta.format).toBe('png');
+    expect(Math.max(meta.width!, meta.height!)).toBeGreaterThanOrEqual(2000);
+    const { channels } = await sharp(page!).stats();
+    expect(channels[0]!.min).toBeLessThan(100);
+  });
+
+  it('a scan without a text layer is OCR\'d: fields at the OCR confidence', async () => {
+    const ocr = fakeOcr(PAN_SHARP_OCR_TEXT, 0.88);
+    const r = (await readUploadedDocuments([doc(1, '/u/scan.pdf')], { ocr, blurThreshold: 30, readFile: readScan })).get(1)!;
+    expect(r).toEqual({
+      source: 'pdf',
+      payload: { pan: 'AAFCS4321M', name: 'SUNRISE TRADERS PVT LTD' },
+      confidence: 0.88,
+      fieldConfidence: { pan: 0.88, name: 0.88 },
+    });
+    expect(ocr.calls).toBe(1);
+  });
+
+  it('a typed header plus a scan: text-layer fields win at PDF_TEXT_CONFIDENCE, OCR fills the rest', async () => {
+    const ocr = fakeOcr('Permanent Account Number\nAAFCS4321M\nName\nSOMEONE ELSE\n', 0.8);
+    const r = (await readUploadedDocuments([doc(1, '/u/scan-header.pdf')], { ocr, blurThreshold: 30, readFile: readScan })).get(1)!;
+    expect(r.payload).toEqual({ name: 'SUNRISE TRADERS PVT LTD', pan: 'AAFCS4321M' });
+    expect(r.confidence).toBe(PDF_TEXT_CONFIDENCE);
+    expect(r.fieldConfidence).toEqual({ name: PDF_TEXT_CONFIDENCE, pan: 0.8 });
+  });
+
+  it('a blurry scan is a blurry document (reviewer), not sent to OCR', async () => {
+    const ocr = fakeOcr();
+    const r = (await readUploadedDocuments([doc(1, '/u/scan-blurry.pdf')], { ocr, blurThreshold: 30, readFile: readScan })).get(1)!;
+    expect(r).toMatchObject({ source: 'pdf', payload: null, blurry: true });
+    expect(r.blurScore).toBeLessThan(30);
+    expect(ocr.calls).toBe(0);
+  });
+
+  it('a text-layer PDF with every field never renders or OCRs', async () => {
+    const ocr = fakeOcr();
+    await readUploadedDocuments([doc(1, '/u/gst.pdf', { type: 'GST_CERT' })], { ocr, blurThreshold: 30, readFile });
+    expect(ocr.calls).toBe(0);
+  });
+});
+
+describe('OCR passes', () => {
+  it('stops at the first pass that finds every field', async () => {
+    const ocr = scriptedOcr([PAN_SHARP_OCR_TEXT]);
+    await readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr, blurThreshold: 30, readFile });
+    expect(ocr.modes).toEqual(['auto']);
+  });
+
+  it('keeps going until fields missing from one pass are found in another; the first value found wins', async () => {
+    const ocr = scriptedOcr(['Permanent Account Number\nAAFCS4321M\n', 'nothing here', 'AAAAA9999A\nName\nSUNRISE TRADERS PVT LTD\n']);
+    const r = (await readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr, blurThreshold: 30, readFile })).get(1)!;
+    expect(r.payload).toEqual({ pan: 'AAFCS4321M', name: 'SUNRISE TRADERS PVT LTD' });
+    expect(ocr.modes).toEqual(['auto', 'auto', 'auto']);
+  });
+
+  it('tries every pass, ending with single-block segmentation, when a field is never found', async () => {
+    const ocr = scriptedOcr(['AAFCS4321M']);
+    const r = (await readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr, blurThreshold: 30, readFile })).get(1)!;
+    expect(r.payload).toEqual({ pan: 'AAFCS4321M' });
+    expect(ocr.modes).toEqual(['auto', 'auto', 'auto', 'block']);
+  });
+});
+
+describe('image formats', () => {
+  it.each([
+    ['webp', (s: Sharp) => s.webp()],
+    ['tiff', (s: Sharp) => s.tiff()],
+  ] as const)('a %s upload is decoded, blur-checked and OCR\'d like a PNG', async (ext, encode) => {
+    const file = await encode(sharp(FILES['/u/sharp.png']!)).toBuffer();
+    const ocr = fakeOcr();
+    const r = (await readUploadedDocuments([doc(1, `/u/card.${ext}`)], { ocr, blurThreshold: 30, readFile: async () => file })).get(1)!;
+    expect(r).toMatchObject({ source: 'ocr', blurry: false, payload: { pan: 'AAFCS4321M' } });
+    expect(ocr.calls).toBe(1);
   });
 });

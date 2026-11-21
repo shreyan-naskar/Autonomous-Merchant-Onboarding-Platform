@@ -1,10 +1,12 @@
 import { FileText, UploadCloud, X } from 'lucide-react'
 import { useEffect, useId, useMemo, useState, type DragEvent } from 'react'
+import { MAX_UPLOAD_BYTES, UPLOAD_FORMATS_LABEL, UPLOAD_MIME_TYPES } from '@app/shared'
 import { cx } from '../lib/tone.ts'
 
-const ACCEPT = 'application/pdf,image/png,image/jpeg'
-const MAX_BYTES = 5 * 1024 * 1024
-const ALLOWED = ['application/pdf', 'image/png', 'image/jpeg']
+const ALLOWED: readonly string[] = Object.keys(UPLOAD_MIME_TYPES)
+const ACCEPT = ALLOWED.join(',')
+// Browsers cannot display TIFF in an <img>.
+const PREVIEWABLE = new Set(['image/png', 'image/jpeg', 'image/webp'])
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
@@ -25,16 +27,16 @@ export function FileDrop({
   const id = useId()
   const [over, setOver] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
-  const preview = useMemo(() => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null), [file])
+  const preview = useMemo(() => (file && PREVIEWABLE.has(file.type) ? URL.createObjectURL(file) : null), [file])
   useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview])
 
   const accept = (f: File | undefined) => {
     if (!f) return
     if (!ALLOWED.includes(f.type)) {
-      setLocalError('Only PDF, PNG or JPEG files')
+      setLocalError(`Only ${UPLOAD_FORMATS_LABEL} files`)
       return
     }
-    if (f.size > MAX_BYTES) {
+    if (f.size > MAX_UPLOAD_BYTES) {
       setLocalError('Files must be 5 MB or smaller')
       return
     }

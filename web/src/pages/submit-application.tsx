@@ -5,6 +5,7 @@ import {
   GSTIN_RE,
   IFSC_RE,
   PAN_RE,
+  UPLOAD_FORMATS_LABEL,
   type ApplicationDetailDto,
   type DocumentType,
 } from '@app/shared'
@@ -230,13 +231,13 @@ export function SubmitApplication() {
         )}
 
         {step === 1 && (
-          <Card title="Documents" subtitle="PAN card, GST certificate and bank proof. Upload files (PDF, PNG, JPEG) or use the sample's structured data.">
+          <Card title="Documents" subtitle="PAN card, GST certificate and bank proof. Upload files (PDFs, including scans, or images) or use the sample's structured data.">
             <div className="grid gap-4 lg:grid-cols-3">
               {DOCUMENT_TYPES.map((t) => {
                 const s = structured.find((d) => d.type === t)
                 return (
                   <div key={t} className="space-y-2">
-                    <FileDrop label={DOCUMENT_LABELS[t]} hint="PDF, PNG or JPEG, up to 5 MB" file={files[t]} onChange={(f) => setFiles({ ...files, [t]: f })} />
+                    <FileDrop label={DOCUMENT_LABELS[t]} hint={`${UPLOAD_FORMATS_LABEL}, up to 5 MB`} file={files[t]} onChange={(f) => setFiles({ ...files, [t]: f })} />
                     {s && !files[t] && (
                       <div className="flex items-center gap-2 rounded-control bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-700 ring-1 ring-neutral-200">
                         <FileJson aria-hidden className="size-4 text-neutral-500" />

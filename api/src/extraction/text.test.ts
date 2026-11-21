@@ -80,6 +80,12 @@ describe('parseDocumentText on real-world layouts', () => {
   it('bank: a label whose value is on the next line still works', () => {
     expect(parseDocumentText('BANK_PROOF', 'Account Number\n5010 0234 5678 91').account_number).toBe('50100234567891');
   });
+
+  it('GST: a redacted or unreadable legal name does not take the next row\'s label as the name', () => {
+    const text = 'GSTIN\t33\nLegal Name\t~~ ~~~\nRegistration Details under Existing Law\n';
+    expect(parseDocumentText('GST_CERT', text).legal_name).toBeUndefined();
+    expect(parseDocumentText('GST_CERT', 'Legal Name\nSunrise Traders Pvt Ltd').legal_name).toBe('Sunrise Traders Pvt Ltd');
+  });
 });
 
 describe('cleanName', () => {

@@ -4,6 +4,7 @@ import {
   FORM_FIELD_LABELS,
   InfoRequestDetailSchema,
   MERCHANT_FORM_FIELDS,
+  UPLOAD_FORMATS_LABEL,
   type ApplicationDetailDto,
   type DocumentType,
   type InfoRequestDetail,
@@ -134,7 +135,7 @@ export function MissingInfoPanel({ app }: { app: ApplicationDetailDto }) {
       <FileDrop
         key={t}
         label={DOCUMENT_LABELS[t]}
-        hint={existing ? `Now: ${existing.file_name ?? 'structured data'}` : 'PDF, PNG or JPEG, up to 5 MB'}
+        hint={existing ? `Now: ${existing.file_name ?? 'structured data'}` : `${UPLOAD_FORMATS_LABEL}, up to 5 MB`}
         file={files[t]}
         onChange={(file) => setFiles({ ...files, [t]: file })}
       />

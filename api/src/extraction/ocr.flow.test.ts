@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, type ApplicationDetailDto } from '@app/shared';
+import sharp from 'sharp';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
@@ -14,7 +15,8 @@ import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
 import { createFakeProviderClient } from '../providers/fake.js';
 import { createTesseractOcr } from './ocr.js';
-import { fakeOcr, PAN_SHARP_OCR_TEXT, textPdf } from './testkit.js';
+import { readUploadedDocuments } from './read.js';
+import { fakeOcr, PAN_SHARP_OCR_TEXT, scannedPdf, textPdf } from './testkit.js';
 import { SAMPLE_DIR } from '../testing.js';
 
 /* Uploaded images and PDFs, end to end: HTTP upload, then the worker's extract job (blur check, OCR, PDF text). */
@@ -123,6 +125,24 @@ describe('uploaded PAN card image', () => {
     ]);
     // Read from an image, still masked in the response.
     expect(panFields[0]!.value).toBe('******321M');
+  });
+
+  it('a WebP photo is accepted, stored as .webp and read like a PNG', async () => {
+    const webp = await sharp(image('pan-sharp.png')).webp().toBuffer();
+    const res = await request(app)
+      .post('/applications')
+      .field('merchant_name', form.merchant_name)
+      .field('pan', form.pan)
+      .field('gst', form.gst)
+      .field('bank_account', form.bank_account)
+      .field('ifsc', form.ifsc)
+      .field('documents', JSON.stringify(form.documents))
+      .attach('PAN_CARD', webp, { filename: 'pan.webp', contentType: 'image/webp' });
+    expect(res.status).toBe(201);
+    await drain();
+    expect(readdirSync(uploadDir).some((f) => f.endsWith('.webp'))).toBe(true);
+    expect(ocr.calls).toBe(1);
+    expect((await get(res.body.id)).status).toBe('VERIFYING');
   });
 
   it('OCR PAN conflicts with the form PAN -> IN_REVIEW DOC_CONFLICT', async () => {
@@ -374,4 +394,26 @@ describe.runIf(haveModel)('tesseract.js on the sample image', () => {
       await engine.terminate();
     }
   }, 60_000);
+
+  it('reads the PAN and name from the same card scanned into a PDF with no text layer, under a block-mode pass too', async () => {
+    const engine = createTesseractOcr({ cacheDir });
+    try {
+      const png = image('pan-sharp.png');
+      const meta = await sharp(png).metadata();
+      const jpeg = await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 85 }).toBuffer();
+      const pdf = scannedPdf(jpeg, { width: meta.width!, height: meta.height! }, { widthPt: 300 });
+      const r = (
+        await readUploadedDocuments([{ id: 1, type: 'PAN_CARD', payload: null, path: 'scan.pdf' }], {
+          ocr: engine,
+          blurThreshold: loadConfig({}).thresholds.blur,
+          readFile: async () => pdf,
+        })
+      ).get(1)!;
+      expect(r.payload).toEqual({ pan: 'AAFCS4321M', name: 'SUNRISE TRADERS PVT LTD' });
+      expect(r.fieldConfidence!.pan).toBeGreaterThan(0.8);
+      expect((await engine.recognize(png, 'block')).text).toContain('AAFCS4321M');
+    } finally {
+      await engine.terminate();
+    }
+  }, 120_000);
 });

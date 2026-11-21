@@ -49,8 +49,10 @@ curl -X POST localhost:3000/applications \
 real text layer: upload them as `GST_CERT` / `BANK_PROOF` (`-F GST_CERT=@sample-data/gst-cert.pdf
 -F BANK_PROOF=@sample-data/bank-proof.pdf`, dropping the `documents` field) and
 their text layer (read with pdfjs, rows rebuilt by position) gives the same fields as the JSON documents, at
-confidence 0.95. A PDF without a text layer (a scan) is treated as unreadable
-(`IN_REVIEW` `LOW_CONFIDENCE`); there is no rasterize-and-OCR step for PDFs.
+confidence 0.95. When the text layer is missing or lacks fields (a scan, or a scan
+under a typed header), the pages are rendered and OCR'd for the missing fields; text
+layer values win. A blurry scan is `IN_REVIEW` `BLURRY_DOCUMENT` like a blurry photo,
+and a blank PDF is unreadable (`IN_REVIEW` `LOW_CONFIDENCE`).
 
 OCR and PDF reading run in the worker's `extract` job. The first image downloads the
 tesseract English model (~10 MB) into `OCR_CACHE_DIR` (`api/.ocr-cache/`).
@@ -94,7 +96,7 @@ It moves `NEEDS_INFO -> EXTRACTING`, is re-extracted, and reaches `VERIFYING`.
 ## Multipart
 
 The same fields as form parts; files go in parts named after their document
-type (`PAN_CARD`, `GST_CERT`, `BANK_PROOF`; PDF, PNG or JPEG, max 5 MB).
+type (`PAN_CARD`, `GST_CERT`, `BANK_PROOF`; PDF, PNG, JPEG, WebP or TIFF, max 5 MB).
 Structured documents can be sent alongside as a JSON `documents` part.
 
 ```sh
