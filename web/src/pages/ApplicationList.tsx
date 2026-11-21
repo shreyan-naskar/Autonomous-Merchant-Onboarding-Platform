@@ -2,7 +2,8 @@ import { APPLICATION_STATUSES, type ApplicationListDto } from '@app/shared'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { StatusBadge } from '../components/StatusBadge.tsx'
-import { Card, ErrorBox, Loading, inputClass } from '../components/ui.tsx'
+import { MetricsStrip } from '../components/MetricsStrip.tsx'
+import { Card, ErrorBox, Loading, PageHeader, inputClass } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 import { duration } from '../lib/format.ts'
 
@@ -16,6 +17,9 @@ export function ApplicationList() {
   })
 
   return (
+    <div className="space-y-5">
+    <PageHeader title="Applications" subtitle="Every merchant application and where it is in onboarding." />
+    <MetricsStrip />
     <Card
       title={`Applications${data ? ` (${data.count})` : ''}`}
       actions={
@@ -82,5 +86,6 @@ export function ApplicationList() {
         </table>
       )}
     </Card>
+    </div>
   )
 }

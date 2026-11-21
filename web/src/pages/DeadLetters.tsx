@@ -2,7 +2,7 @@ import { REVIEW_NOTE_MIN, type DeadJobDto, type DeadJobListDto } from '@app/shar
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Card, ErrorBox, Loading, buttonClass, inputClass } from '../components/ui.tsx'
+import { Card, ErrorBox, Loading, buttonClass, inputClass, PageHeader } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 import { dateTime } from '../lib/format.ts'
 
@@ -18,6 +18,8 @@ export function DeadLetters() {
     queryFn: () => api.get<DeadJobListDto>('/jobs?status=dead'),
   })
   return (
+    <>
+    <PageHeader title="Dead letters" subtitle="Background jobs that failed every retry." />
     <Card title={`Dead-letter jobs${data ? ` (${data.count})` : ''}`}>
       <ErrorBox error={error} />
       {isPending && <Loading />}
@@ -43,6 +45,7 @@ export function DeadLetters() {
         </table>
       )}
     </Card>
+    </>
   )
 }
 

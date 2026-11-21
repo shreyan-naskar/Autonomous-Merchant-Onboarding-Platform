@@ -359,10 +359,10 @@ export function EmptyState({ icon: Icon, title, text, action }: { icon: LucideIc
 // ---------------------------------------------------------------------------
 // Tooltip: shown on hover and keyboard focus; the trigger is described by it.
 
-export function Tooltip({ content, children, side = 'top' }: { content: ReactNode; children: ReactNode; side?: 'top' | 'bottom' }) {
+export function Tooltip({ content, children, side = 'top', className }: { content: ReactNode; children: ReactNode; side?: 'top' | 'bottom'; className?: string }) {
   const id = useId()
   return (
-    <span className="group/tt relative inline-flex" aria-describedby={id}>
+    <span className={cx('group/tt relative', className ?? 'inline-flex')} aria-describedby={id}>
       {children}
       <span
         role="tooltip"

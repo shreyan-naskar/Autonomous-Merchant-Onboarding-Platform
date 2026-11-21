@@ -1,6 +1,6 @@
 import type { ChaosConfig, MerchantServiceConfig } from '@app/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Card, ErrorBox, Loading, buttonClass, inputClass } from '../components/ui.tsx'
+import { Card, ErrorBox, Loading, buttonClass, inputClass, PageHeader } from '../components/ui.tsx'
 import { api, mockApi } from '../lib/api.ts'
 
 /** Late callbacks arrive after this delay: longer than the API's 30s demo timeout, so the API times out and retries first. */
@@ -85,6 +85,8 @@ export function DemoPanel() {
     : []
 
   return (
+    <>
+    <PageHeader title="Demo controls" subtitle="Make the simulated providers misbehave to show each failure path." />
     <div className="space-y-4">
       <Card
         title="Demo controls"
@@ -164,5 +166,6 @@ export function DemoPanel() {
         </p>
       </Card>
     </div>
+    </>
   )
 }

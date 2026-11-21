@@ -8,6 +8,7 @@ export * from './validators.js';
 export * from './providers.js';
 export * from './review.js';
 export * from './correction.js';
+export * from './labels.js';
 
 export const HealthSchema = z.object({
   status: z.string(),

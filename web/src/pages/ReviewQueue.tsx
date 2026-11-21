@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import { ReviewActions } from '../components/ReviewActions.tsx'
 import { TaskLinks } from '../components/ReviewTaskList.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
-import { Card, ErrorBox, Loading } from '../components/ui.tsx'
+import { Card, ErrorBox, Loading, PageHeader } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 import { dateTime } from '../lib/format.ts'
 
@@ -15,6 +15,8 @@ export function ReviewQueue() {
     queryFn: () => api.get<ReviewQueueDto>('/review-tasks?status=OPEN'),
   })
   return (
+    <>
+    <PageHeader title="Review queue" subtitle="Exceptions waiting for a person to decide." />
     <Card title={`Review queue${data ? ` (${data.count} open)` : ''}`}>
       <ErrorBox error={error} />
       {isPending && <Loading />}
@@ -38,5 +40,6 @@ export function ReviewQueue() {
         ))}
       </ul>
     </Card>
+    </>
   )
 }

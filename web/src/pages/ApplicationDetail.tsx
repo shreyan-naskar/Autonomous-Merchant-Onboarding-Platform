@@ -1,7 +1,7 @@
 import type { ApplicationDetailDto } from '@app/shared'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { Link, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import { BankChangeForm } from '../components/BankChangeForm.tsx'
 import { ExtractedFields } from '../components/ExtractedFields.tsx'
 import { MissingInfoPanel } from '../components/MissingInfoPanel.tsx'
@@ -9,7 +9,7 @@ import { ReviewTaskList } from '../components/ReviewTaskList.tsx'
 import { StatusBadge } from '../components/StatusBadge.tsx'
 import { Timeline } from '../components/Timeline.tsx'
 import { VerificationCards } from '../components/VerificationCards.tsx'
-import { Card, ErrorBox, Loading } from '../components/ui.tsx'
+import { Card, ErrorBox, Loading, PageHeader } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 import { duration } from '../lib/format.ts'
 
@@ -24,9 +24,7 @@ export function ApplicationDetail() {
 
   return (
     <div className="space-y-4">
-      <Link to="/" className="text-sm text-slate-500 hover:underline">
-        ← Applications
-      </Link>
+      <PageHeader title={app.merchant_name} docTitle={app.merchant_name} breadcrumbs={[{ label: 'Applications', to: '/' }, { label: app.merchant_name }]} />
       <ErrorBox error={error} />
 
       <div className="flex flex-wrap items-center gap-3">

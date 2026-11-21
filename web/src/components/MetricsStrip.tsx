@@ -1,43 +1,93 @@
-import type { MetricsDto } from '@app/shared'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../lib/api.ts'
+import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationStatus } from '@app/shared'
+import { Activity, AlertTriangle, CheckCircle2, Timer } from 'lucide-react'
+import { STATUS_ICON, toneOf } from '../lib/labels.tsx'
 import { duration } from '../lib/format.ts'
+import { useMetrics } from '../lib/queries.ts'
+import { Skeleton, StatCard, Tooltip, TONE_SOFT, cx } from './ui.tsx'
 
-/** Totals and average time per state, from GET /metrics (computed by the API from the audit log). */
+/** Stages whose average duration says something about throughput. */
+const TIMED: readonly ApplicationStatus[] = ['EXTRACTING', 'VERIFYING', 'IN_REVIEW', 'NEEDS_INFO', 'APPROVED']
+
+/**
+ * Operational metrics from GET /metrics (computed by the API from the audit
+ * log): totals, exception rate, average time per stage, and how many
+ * applications are in each state right now. Shown on the Applications page.
+ */
 export function MetricsStrip() {
-  const { data, error } = useQuery({ queryKey: ['metrics'], queryFn: () => api.get<MetricsDto>('/metrics') })
-  if (error) return <div className="text-xs text-red-700">Metrics unavailable: {error.message}</div>
-  if (!data) return null
-  return (
-    <div className="flex flex-wrap items-stretch gap-2 text-xs">
-      <Tile label="Applications" value={String(data.total_applications)} />
-      <Tile
-        label="Exception rate"
-        value={`${Math.round(data.exception_rate * 100)}%`}
-        sub={`${data.exception_count} hit IN_REVIEW / NEEDS_INFO`}
-      />
-      <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-1 rounded border border-slate-200 bg-white px-3 py-2">
-        <span className="font-semibold text-slate-500">Avg time in state</span>
-        {data.states
-          .filter((s) => s.completed > 0 || s.current > 0)
-          .map((s) => (
-            <span key={s.state} title={`${s.completed} completed stays, ${s.current} now`}>
-              <span className="font-mono text-slate-500">{s.state}</span>{' '}
-              <span className="font-semibold tabular-nums">{s.avg_ms === null ? '—' : duration(s.avg_ms)}</span>
-              {s.current > 0 && <span className="text-slate-400"> ({s.current} now)</span>}
-            </span>
-          ))}
+  const { data, isPending, isError } = useMetrics()
+  if (isPending) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading metrics" role="status">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-[104px]" />
+        ))}
       </div>
-    </div>
-  )
-}
+    )
+  }
+  if (isError || !data) return null
 
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  const current = Object.fromEntries(data.states.map((s) => [s.state, s.current])) as Partial<Record<ApplicationStatus, number>>
+  const avg = Object.fromEntries(data.states.map((s) => [s.state, s.avg_ms])) as Partial<Record<ApplicationStatus, number | null>>
+  const created = current.MERCHANT_CREATED ?? 0
+  const attention = (current.NEEDS_INFO ?? 0) + (current.IN_REVIEW ?? 0) + (current.MERCHANT_CREATION_FAILED ?? 0)
+  const verifying = avg.VERIFYING
+
   return (
-    <div className="rounded border border-slate-200 bg-white px-3 py-2">
-      <div className="text-slate-500">{label}</div>
-      <div className="text-lg font-semibold tabular-nums leading-tight">{value}</div>
-      {sub && <div className="text-[11px] text-slate-400">{sub}</div>}
-    </div>
+    <section aria-label="Operational metrics" className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Applications" value={data.total_applications} icon={Activity} tone="accent" hint={`${created} onboarded`} />
+        <StatCard
+          label="Exception rate"
+          value={`${Math.round(data.exception_rate * 100)}%`}
+          icon={AlertTriangle}
+          tone="warning"
+          hint={`${data.exception_count} needed a person or more information`}
+        />
+        <StatCard label="Need attention now" value={attention} icon={AlertTriangle} tone={attention > 0 ? 'danger' : 'neutral'} hint="Needs information, in review or merchant ID failed" />
+        <StatCard
+          label="Avg time verifying"
+          value={verifying == null ? '—' : duration(verifying)}
+          icon={Timer}
+          tone="info"
+          hint="From sending checks to the providers until all answers are in"
+        />
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-3">
+        <div className="rounded-card border border-neutral-200 bg-white p-4 shadow-card lg:col-span-2">
+          <h2 className="text-xs font-medium text-neutral-500">Applications by status</h2>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {APPLICATION_STATUSES.map((s) => {
+              const n = current[s] ?? 0
+              const Icon = STATUS_ICON[s]
+              return (
+                <li key={s}>
+                  <Tooltip content={STATUS_LABELS[s].description}>
+                    <span tabIndex={0} className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ring-inset', n ? TONE_SOFT[toneOf(STATUS_LABELS[s].severity)] : 'bg-white text-neutral-400 ring-neutral-200')}>
+                      <Icon aria-hidden className="size-3.5" />
+                      {STATUS_LABELS[s].label}
+                      <span className="tabular font-semibold">{n}</span>
+                    </span>
+                  </Tooltip>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+        <div className="rounded-card border border-neutral-200 bg-white p-4 shadow-card">
+          <h2 className="flex items-center gap-1.5 text-xs font-medium text-neutral-500">
+            <CheckCircle2 aria-hidden className="size-3.5" /> Average time in state
+          </h2>
+          <dl className="mt-3 space-y-1.5 text-sm">
+            {TIMED.map((s) => (
+              <div key={s} className="flex justify-between gap-3">
+                <dt className="text-neutral-600">{STATUS_LABELS[s].label}</dt>
+                <dd className="tabular font-medium text-neutral-900">{avg[s] == null ? '—' : duration(avg[s]!)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </section>
   )
 }

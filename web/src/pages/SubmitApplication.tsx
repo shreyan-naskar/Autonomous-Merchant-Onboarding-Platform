@@ -2,7 +2,7 @@ import { DOCUMENT_TYPES, type ApplicationDetailDto, type DocumentType } from '@a
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
-import { Card, ErrorBox, buttonClass, inputClass } from '../components/ui.tsx'
+import { Card, ErrorBox, buttonClass, inputClass, PageHeader } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 
 /** sample-data/*.json, bundled at build time. */
@@ -75,6 +75,8 @@ export function SubmitApplication() {
   }
 
   return (
+    <>
+    <PageHeader title="Submit application" subtitle="Send a new merchant application with its documents." />
     <Card
       title="Submit a merchant application"
       actions={
@@ -129,5 +131,6 @@ export function SubmitApplication() {
         </button>
       </form>
     </Card>
+    </>
   )
 }
