@@ -1,3 +1,4 @@
+import type { InfoRequestDetail } from '@app/shared';
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { applications, documents, extractedFields, reviewTasks } from '../db/schema.js';
@@ -8,6 +9,7 @@ import { decideAfterExtraction, type ExtractionDecision, type FieldProblem } fro
 import { extractFields } from './extract.js';
 import type { OcrEngine } from './ocr.js';
 import { readUploadedDocuments } from './read.js';
+import { merchantRequests } from './requests.js';
 
 export interface ExtractionDeps {
   db: Db;
@@ -25,11 +27,24 @@ const describeProblem = (p: FieldProblem) =>
     .filter(Boolean)
     .join(', ')})`;
 
-/** Audit detail for the post-extraction transition. Field names and issues only, never values. */
+/**
+ * Audit detail for the post-extraction transition. Field names, issues and
+ * merchant-facing messages only, never values. For NEEDS_INFO it is an
+ * InfoRequestDetail (shared): the web panel renders it.
+ */
 function auditDetail(d: ExtractionDecision, threshold: number, blurThreshold: number) {
   switch (d.reason) {
-    case 'MISSING_INFO':
-      return { reason: d.reason, missing: d.missing };
+    case 'MISSING_INFO': {
+      const r = merchantRequests(d.missing);
+      const detail: InfoRequestDetail = {
+        reason: d.reason,
+        missing: d.missing,
+        requests: r.requests,
+        form_fields: r.formFields,
+        documents: r.documents,
+      };
+      return detail;
+    }
     case 'BLURRY_DOCUMENT':
       return {
         reason: d.reason,
@@ -144,7 +159,13 @@ export async function runExtraction(
   );
 
   logger.info(
-    { application_id: appId, to: decision.to, reason: decision.reason, missing: decision.missing.length, conflicts: decision.conflicts.length },
+    {
+      application_id: appId,
+      to: decision.to,
+      reason: decision.reason,
+      missing: decision.missing.length,
+      conflicts: decision.conflicts.length,
+    },
     'extraction decided',
   );
   return decision;

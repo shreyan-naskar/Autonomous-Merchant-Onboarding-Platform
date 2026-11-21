@@ -2,10 +2,22 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Worker } from 'tesseract.js';
 
-/** OCR result: full text plus the engine's mean confidence, scaled to 0-1. */
+/** One recognized word and its confidence (0-1). */
+export interface OcrWord {
+  text: string;
+  confidence: number;
+}
+
+/**
+ * OCR result: full text, the engine's mean confidence over the whole page
+ * (0-1), and per-word confidences. The page mean is dragged down by
+ * everything else on a real card (Hindi text, hologram, photo, signature),
+ * so field confidence is taken from the words of each value (read.ts).
+ */
 export interface OcrResult {
   text: string;
   confidence: number;
+  words?: OcrWord[];
 }
 
 /**
@@ -44,8 +56,12 @@ export function createTesseractOcr({ cacheDir }: { cacheDir: string }): OcrEngin
   return {
     async recognize(image) {
       const w = await getWorker();
-      const { data } = await w.recognize(image);
-      return { text: data.text, confidence: Math.max(0, Math.min(1, data.confidence / 100)) };
+      const { data } = await w.recognize(image, {}, { text: true, blocks: true });
+      const scale = (c: number) => Math.max(0, Math.min(1, c / 100));
+      const words = (data.blocks ?? []).flatMap((b) =>
+        b.paragraphs.flatMap((p) => p.lines.flatMap((l) => l.words.map((wd) => ({ text: wd.text, confidence: scale(wd.confidence) })))),
+      );
+      return { text: data.text, confidence: scale(data.confidence), words };
     },
     async terminate() {
       if (!worker) return;

@@ -138,6 +138,7 @@ describe('chaos settings', () => {
       duplicateCallback: false,
       dropCallback: false,
       lateCallbackMs: 0,
+      outage: false,
     });
     const res = await request(app).post('/admin/config').send({ failKinds: ['GST'], duplicateCallback: true });
     expect(res.status).toBe(200);
@@ -198,6 +199,19 @@ describe('chaos settings', () => {
     await request(app).post('/admin/reset').expect(200);
     await request(app).post('/admin/redeliver').send({}).expect(404);
     expect(sent).toHaveLength(1);
+  });
+
+  it('outage refuses every verify request with 503 and sends nothing; off again, requests work', async () => {
+    makeApp({ outage: true });
+    for (const [path, body] of Object.values(happy)) {
+      const res = await request(app).post(path).send(body);
+      expect(res.status).toBe(503);
+      expect(res.body.error).toBe('PROVIDER_UNAVAILABLE');
+    }
+    await sched.advance(5_000);
+    expect(sent).toHaveLength(0);
+    await request(app).post('/admin/config').send({ outage: false }).expect(200);
+    await call(...happy.PAN);
   });
 
   it('dropCallback sends nothing', async () => {

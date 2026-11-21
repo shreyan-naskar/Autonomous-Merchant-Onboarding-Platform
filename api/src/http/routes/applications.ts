@@ -10,15 +10,18 @@ import {
   ReviewRequestSchema,
   MAX_UPLOAD_BYTES,
   UPLOAD_MIME_TYPES,
+  UpdateApplicationMultipartFieldsSchema,
   UpdateApplicationSchema,
   type ApplicationFields,
   type DocumentType,
   type UpdateApplication,
 } from '@app/shared';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { Router, type Request } from 'express';
 import multer from 'multer';
 import type { Config } from '../../config.js';
 import type { Db } from '../../db/client.js';
+import { documents as documentsTable } from '../../db/schema.js';
 import { getApplicationDetail, listApplications } from '../../domain/queries.js';
 import {
   submitApplication,
@@ -128,19 +131,66 @@ export function applicationsRouter({ db, logger, config, uploadDir, now }: Appli
     res.json(toDetailDto(detail, now()));
   });
 
-  router.patch('/:id', (req, res) => {
-    const { documents: docs, ...fields } = UpdateApplicationSchema.parse(req.body);
-    const app = updateApplication(
-      db,
-      req.params.id,
-      { ...toInput(fields), documents: docs?.map((d) => ({ type: d.type, payload: d.payload })) },
-      { now: now() },
-    );
-    logger.info(
-      { application_id: app.id, fields: Object.keys(fields), document_types: docs?.map((d) => d.type), status: app.status },
-      'application updated',
-    );
-    res.json(toDetailDto(getApplicationDetail(db, app.id)!, now()));
+  /** Upload paths currently stored for these document types (replaced files are deleted after a successful PATCH). */
+  const storedPaths = (appId: string, types: DocumentType[]) =>
+    types.length === 0
+      ? []
+      : db
+          .select({ path: documentsTable.path })
+          .from(documentsTable)
+          .where(and(eq(documentsTable.applicationId, appId), inArray(documentsTable.type, types), isNotNull(documentsTable.path)))
+          .all()
+          .map((r) => r.path!);
+  const stillReferenced = (path: string) =>
+    db.select({ id: documentsTable.id }).from(documentsTable).where(eq(documentsTable.path, path)).get() !== undefined;
+
+  /**
+   * Merchant edits. JSON: any subset of the form fields and/or structured
+   * documents. Multipart (the browser's correction panel): form fields as text
+   * parts, an optional `documents` JSON part, and files named PAN_CARD /
+   * GST_CERT / BANK_PROOF. Documents and files are only accepted in NEEDS_INFO
+   * (409 elsewhere); each replaces the document of its type, and a replaced
+   * upload is deleted from disk.
+   */
+  router.patch('/:id', upload, async (req, res) => {
+    const files = uploadedFiles(req);
+    try {
+      let fields: Partial<ApplicationFields>;
+      let docs: NewDocumentInput[];
+      const via = req.is('multipart/form-data') ? 'multipart' : 'json';
+      if (via === 'multipart') {
+        const { documents: structured = [], ...rest } = UpdateApplicationMultipartFieldsSchema.parse(dropEmpty(req.body));
+        fields = rest;
+        docs = [
+          ...structured.map((d) => ({ type: d.type, payload: d.payload })),
+          ...files.map((f) => ({ type: f.fieldname as DocumentType, path: f.path })),
+        ];
+        const types = docs.map((d) => d.type);
+        const dupes = types.filter((t, i) => types.indexOf(t) !== i);
+        if (dupes.length) throw new BadRequestError('Each document type may appear at most once', { duplicates: dupes });
+        if (docs.length === 0 && Object.values(fields).every((v) => v === undefined)) {
+          throw new BadRequestError('Provide at least one field or document to update');
+        }
+      } else {
+        const { documents: structured, ...rest } = UpdateApplicationSchema.parse(req.body);
+        fields = rest;
+        docs = structured?.map((d) => ({ type: d.type, payload: d.payload })) ?? [];
+      }
+
+      const replaced = storedPaths(req.params.id as string, docs.map((d) => d.type));
+      const app = updateApplication(db, req.params.id as string, { ...toInput(fields), documents: docs }, { now: now() });
+      // Old uploads that no document points to any more: remove them (best effort).
+      await Promise.all(replaced.filter((p) => !stillReferenced(p)).map((p) => unlink(p).catch(() => undefined)));
+      logger.info(
+        { application_id: app.id, via, fields: Object.keys(fields), document_types: docs.map((d) => d.type), status: app.status },
+        'application updated',
+      );
+      res.json(toDetailDto(getApplicationDetail(db, app.id)!, now()));
+    } catch (err) {
+      // Nothing references files saved by a failed PATCH; remove them.
+      await Promise.all(files.map((f) => unlink(f.path).catch(() => undefined)));
+      throw err;
+    }
   });
 
   // Operator decision on an open review task. 409 with a readable message when

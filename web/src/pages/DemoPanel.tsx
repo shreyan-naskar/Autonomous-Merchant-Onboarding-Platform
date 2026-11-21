@@ -31,9 +31,18 @@ export function DemoPanel() {
     },
     onSuccess: () => qc.invalidateQueries(),
   })
+  // Demo mode only (the API answers 404 otherwise): deletes every application, then resets the switches.
+  const wipe = useMutation({
+    mutationFn: async () => {
+      await api.post('/admin/reset-data')
+      await mockApi.post('/admin/reset')
+      await api.post('/admin/merchant-service', { fail: false })
+    },
+    onSuccess: () => qc.invalidateQueries(),
+  })
 
   const c = chaos.data
-  const busy = setChaos.isPending || setMerchant.isPending || reset.isPending
+  const busy = setChaos.isPending || setMerchant.isPending || reset.isPending || wipe.isPending
   const toggles: { label: string; help: string; on: boolean; set: (on: boolean) => void }[] = c
     ? [
         {
@@ -61,6 +70,12 @@ export function DemoPanel() {
           set: (on) => setChaos.mutate({ lateCallbackMs: on ? LATE_MS : 0 }),
         },
         {
+          label: 'Provider outage',
+          help: 'Providers refuse every request (503): the API retries with backoff (1s, 2s, 4s, 8s), then the job goes to Dead letters (requeue it there once this is off)',
+          on: c.outage,
+          set: (on) => setChaos.mutate({ outage: on }),
+        },
+        {
           label: 'Fail merchant creation',
           help: 'Merchant ID service fails: 3 attempts with backoff, then MERCHANT_CREATION_FAILED',
           on: merchant.data?.fail ?? false,
@@ -74,13 +89,25 @@ export function DemoPanel() {
       <Card
         title="Demo controls"
         actions={
-          <button className={buttonClass.secondary} disabled={busy} onClick={() => reset.mutate()}>
-            Reset all
-          </button>
+          <div className="flex gap-2">
+            <button className={buttonClass.secondary} disabled={busy} onClick={() => reset.mutate()}>
+              Reset all
+            </button>
+            <button
+              className={buttonClass.secondary}
+              disabled={busy}
+              title="Delete every application, review task, job and audit entry (demo mode only), and reset the switches"
+              onClick={() => {
+                if (window.confirm('Delete ALL applications and their history? This cannot be undone.')) wipe.mutate()
+              }}
+            >
+              Delete all data
+            </button>
+          </div>
         }
       >
         {(chaos.isPending || merchant.isPending) && <Loading />}
-        <ErrorBox error={chaos.error ?? merchant.error ?? setChaos.error ?? setMerchant.error ?? reset.error} />
+        <ErrorBox error={chaos.error ?? merchant.error ?? setChaos.error ?? setMerchant.error ?? reset.error ?? wipe.error} />
         <ul className="divide-y divide-slate-100">
           {toggles.map((t) => (
             <li key={t.label} className="flex items-center justify-between gap-4 py-2">

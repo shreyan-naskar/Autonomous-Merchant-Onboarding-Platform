@@ -9,6 +9,9 @@ steps 1-4 unattended and prints the audit trails.
 its own services on a fresh database and prints every check and both audit
 trails (about 10 seconds).
 
+Every requirement and scenario of the brief, one by one, with how to show it
+in the website: [REQUIREMENTS.md](REQUIREMENTS.md).
+
 ## Before the audience arrives
 
 ```sh
@@ -130,7 +133,7 @@ curl -s localhost:3000/metrics | jq
 ## Extras if there are questions
 
 - **Timeouts**: Demo controls -> **Drop callback (timeout)**, then submit a sample. Every check times out at 30s and is retried twice with backoff. After about 95s the application is `IN_REVIEW` with a `<KIND>_TIMEOUT` task. Turn the switch off afterwards.
-- **Dead letters**: Stop the mock providers (`kill $(lsof -ti tcp:4000)`; Ctrl+C would stop all of `npm run dev`), submit `happy.json`, wait about 20s, then open **Dead letters**: a `start_verifications` job after 5 attempts with its error. Restart the mocks (`npm run dev -w mock-providers`), type a note and click **Requeue**.
+- **Dead letters**: Demo controls -> **Provider outage** on, submit `happy.json`, wait about 20s, then open **Dead letters**: a `start_verifications` job after 5 attempts with its 503 error. Turn the outage off, type a note and click **Requeue**: the application completes.
 - **Blurry document / OCR**: **Submit** -> load `ocr-pan.json` -> attach `sample-data/pan-blurry.png` as the PAN card -> `IN_REVIEW BLURRY_DOCUMENT` (blur score about 1.7 against a threshold of 30). With `pan-sharp.png`, OCR reads the PAN and name at about 0.94 confidence. The first OCR downloads the model, so do one rehearsal run.
 - **Duplicate application**: submit `happy.json` twice. The second gets a `POSSIBLE_DUPLICATE` task linking the first, and is held in `IN_REVIEW` instead of auto-approving.
 - **Failure scenarios as tests**: `npx vitest run api/src/scenarios.test.ts`.

@@ -114,7 +114,7 @@ describe('duplicate detection at submit', () => {
 
   it('the bundled sample files never match each other', async () => {
     const app = createApp({ ...env, now: () => T0 });
-    for (const f of ['happy.json', 'gst-fail.json', 'conflict.json', 'missing.json', 'high-risk.json', 'ocr-pan.json']) {
+    for (const f of ['happy.json', 'gst-fail.json', 'conflict.json', 'missing.json', 'high-risk.json', 'ocr-pan.json', 'low-confidence.json']) {
       await request(app).post('/applications').send(sample(f)).expect(201);
     }
     for (const a of db.select().from(applications).all()) expect(tasksOf(db, a.id)).toEqual([]);

@@ -205,6 +205,8 @@ export function extractFields(
     // Values read from a file are only as good as the read (OCR confidence).
     const fromFile = !structured && payload !== null;
     const sourceConfidence = fromFile ? doc.reading!.confidence : STRUCTURED_CONFIDENCE;
+    // OCR'd values carry the confidence of their own words when known.
+    const confidenceOf = (key: string) => (fromFile ? (doc.reading!.fieldConfidence?.[key] ?? sourceConfidence) : sourceConfidence);
     const blurry = !structured && doc.reading?.blurry === true;
     if (blurry) blurryDocuments.push({ documentType: type, documentId: doc.id, blurScore: doc.reading!.blurScore! });
 
@@ -242,7 +244,7 @@ export function extractFields(
         fields.push({
           ...base,
           value,
-          confidence: Math.min(FORMAT_FAIL_CONFIDENCE, sourceConfidence),
+          confidence: Math.min(FORMAT_FAIL_CONFIDENCE, confidenceOf(spec.key)),
           validationStatus: 'low_confidence',
           issue: 'invalid_format',
         });
@@ -252,7 +254,7 @@ export function extractFields(
       fields.push({
         ...base,
         value,
-        confidence: sourceConfidence,
+        confidence: confidenceOf(spec.key),
         validationStatus: issue ? 'mismatch' : 'ok',
         ...(issue ? { issue } : {}),
         ...(similarity !== undefined ? { similarity } : {}),

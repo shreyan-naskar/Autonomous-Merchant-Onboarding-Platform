@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { OcrEngine } from './ocr.js';
-import { readUploadedDocuments, type ReadableDocument } from './read.js';
+import { readUploadedDocuments, valueConfidence, type ReadableDocument } from './read.js';
 import { PDF_TEXT_CONFIDENCE } from './read.js';
-import { fakeOcr, textPdf } from './testkit.js';
+import { fakeOcr, positionedPdf, textPdf, TWO_COLUMN_BANK_PDF_ITEMS } from './testkit.js';
 
 const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 const FILES: Record<string, Buffer> = {
@@ -16,6 +16,7 @@ const FILES: Record<string, Buffer> = {
   '/u/bank.PDF': readFileSync(join(SAMPLE_DIR, 'bank-proof.pdf')),
   '/u/scanned.pdf': textPdf([]),
   '/u/corrupt.pdf': Buffer.from('%PDF-1.4 truncated'),
+  '/u/two-column.pdf': positionedPdf(TWO_COLUMN_BANK_PDF_ITEMS),
 };
 const readFile = async (p: string) => {
   const f = FILES[p];
@@ -105,5 +106,46 @@ describe('readUploadedDocuments: PDFs (text layer)', () => {
   it('a corrupt PDF is unreadable (not retried): not_a_pdf', async () => {
     const r = (await readUploadedDocuments([doc(1, '/u/corrupt.pdf')], opts())).get(1)!;
     expect(r).toEqual({ source: 'pdf', payload: null, confidence: 0, error: 'not_a_pdf' });
+  });
+});
+
+describe('field confidence from OCR words (not the page mean)', () => {
+  it('a real card scores 0.37 overall but its PAN and name words 0.90 / 0.92: fields get their own', async () => {
+    const words = [
+      { text: 'INCOME', confidence: 0.3 },
+      { text: 'AAFCS4321M', confidence: 0.9 },
+      { text: 'SUNRISE', confidence: 0.95 },
+      { text: 'TRADERS', confidence: 0.92 },
+      { text: 'PVT', confidence: 0.97 },
+      { text: 'LTD', confidence: 0.96 },
+    ];
+    const r = (await readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr: fakeOcr(undefined, 0.37, words), blurThreshold: 30, readFile })).get(1)!;
+    expect(r.confidence).toBe(0.37);
+    expect(r.fieldConfidence).toEqual({ pan: 0.9, name: 0.92 });
+  });
+
+  it('valueConfidence: lowest word wins; best match per word; O and 0 compare equal; unknown word -> fallback', () => {
+    const words = [
+      { text: 'RAVI', confidence: 0.9 },
+      { text: 'KUMAR', confidence: 0.6 },
+      { text: 'KUMAR', confidence: 0.85 },
+      { text: 'HDFCO001234', confidence: 0.8 },
+    ];
+    expect(valueConfidence('RAVI KUMAR', words, 0.3)).toBe(0.85);
+    expect(valueConfidence('HDFC0001234', words, 0.3)).toBe(0.8);
+    expect(valueConfidence('RAVI SHARMA', words, 0.3)).toBe(0.3);
+  });
+
+  it('without word data the page confidence is used (no fieldConfidence)', async () => {
+    const r = (await readUploadedDocuments([doc(1, '/u/sharp.png')], { ocr: fakeOcr(), blurThreshold: 30, readFile })).get(1)!;
+    expect(r.fieldConfidence).toBeUndefined();
+    expect(r.confidence).toBe(0.94);
+  });
+});
+
+describe('two-column bank statement PDF (labels drawn before values)', () => {
+  it('rows rebuilt by position: account number, IFSC (O -> 0) and holder all found', async () => {
+    const r = (await readUploadedDocuments([doc(1, '/u/two-column.pdf', { type: 'BANK_PROOF' })], { ocr: fakeOcr(), blurThreshold: 30, readFile })).get(1)!;
+    expect(r.payload).toEqual({ account_number: '50100234567891', ifsc: 'HDFC0001234', account_holder: 'RAVI KUMAR' });
   });
 });

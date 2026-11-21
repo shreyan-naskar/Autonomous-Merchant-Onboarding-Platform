@@ -791,3 +791,38 @@ Not verified: the UI in a real browser (no browser tool in these sessions);
 the click-by-click DEMO.md steps are built from the page code, and their API
 calls were run via curl. Mermaid diagrams were not rendered locally.
 
+
+### After v1.0: real documents, demo-in-the-website (2026-11-21)
+
+1. Real documents (a bilingual PAN card JPEG, a two-column bank statement
+   PDF) extracted badly. Fixed: per-field OCR confidence from word
+   confidences (`OcrResult.words`, `valueConfidence`), labels after junk or
+   separators (Father's / Mother's / Branch / ... Name excluded), `cleanName`
+   (drop titles, keep the capitalized run), tab = column break, IFSC 5th
+   char O -> 0, PDF rows rebuilt from item positions with pdfjs-dist
+   (replaces pdf-parse, which cannot give positions). Image preprocessing
+   was measured and made OCR worse on the real card, so none is applied.
+2. A "merchant fixes problems first" routing was built and then removed at
+   the user's request: the brief routes exceptions (blurred, conflicting,
+   low-confidence documents) to a human reviewer. Kept from that work:
+   NEEDS_INFO audit detail is `InfoRequestDetail` (`shared/src/correction.ts`:
+   plain-language `requests` for missing items, `form_fields`, `documents`;
+   built by `api/src/extraction/requests.ts`), multipart `PATCH
+   /applications/:id` (files only in NEEDS_INFO, replaced uploads deleted),
+   and the web `MissingInfoPanel` (an input per missing form field, an
+   upload per missing document, "Other changes", operator Request info
+   offers everything).
+3. Demo in the website: `docs/REQUIREMENTS.md` (every line of the brief with
+   how to show it). Mock chaos `outage` (503 for every verify request) with
+   a **Provider outage** switch; **Delete all data** button
+   (`/admin/reset-data`); samples `low-confidence.json`,
+   `missing-gst-cert.pdf` (generator). Every walkthrough's outcome and
+   timing was checked on live services (scratch DB, ports 3100/4100):
+   outage dead-letters in ~17s and completes after requeue; late callback
+   ~47s; dropped callback -> IN_REVIEW PAN_TIMEOUT ~94s; duplicate
+   application held POSSIBLE_DUPLICATE; merchant ID failure; low
+   confidence; conflict; blurry; missing + PDF upload -> MERCHANT_CREATED;
+   restart mid-VERIFYING completes 28s after restart.
+
+Tests: 458 passing. The website pages were typechecked and built, not
+clicked in a browser (no browser tool).

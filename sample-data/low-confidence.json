@@ -1,0 +1,15 @@
+{
+  "merchant_name": "Kaveri Handlooms Pvt Ltd",
+  "pan": "AAHCK2468P",
+  "gst": "29AAHCK2468P1Z7",
+  "bank_account": "91200034567812",
+  "ifsc": "KKBK0002468",
+  "documents": [
+    { "type": "PAN_CARD", "payload": { "pan": "AAHCK2468P", "name": "Kaveri Handlooms Pvt Ltd" } },
+    { "type": "GST_CERT", "payload": { "gstin": "29AAHCK2468P1Z7", "legal_name": "Kaveri Handlooms Pvt Ltd" } },
+    {
+      "type": "BANK_PROOF",
+      "payload": { "account_number": "91200034567812", "ifsc": "KKBK2002468", "account_holder": "Kaveri Handlooms Pvt Ltd" }
+    }
+  ]
+}

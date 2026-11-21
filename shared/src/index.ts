@@ -7,6 +7,7 @@ export * from './dto.js';
 export * from './validators.js';
 export * from './providers.js';
 export * from './review.js';
+export * from './correction.js';
 
 export const HealthSchema = z.object({
   status: z.string(),

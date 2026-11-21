@@ -24,7 +24,9 @@ export interface ExtractionDecision {
 }
 
 /**
- * What to do after extraction. Pure. First matching rule wins:
+ * What to do after extraction. Pure. As in the brief: the system "requests
+ * missing information or routes exceptions to a human reviewer". First
+ * matching rule wins:
  *  1. anything missing           -> NEEDS_INFO (MISSING_INFO)
  *  2. any blurry uploaded image  -> IN_REVIEW  (BLURRY_DOCUMENT)
  *  3. any field mismatches       -> IN_REVIEW  (DOC_CONFLICT)

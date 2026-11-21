@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
 import { loadConfig } from '../config.js';
 import { openDb, type Db } from '../db/client.js';
-import { jobs } from '../db/schema.js';
+import { documents as documentsTable, jobs } from '../db/schema.js';
 import { createJobHandlers } from '../jobs/handlers.js';
 import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
@@ -218,6 +218,145 @@ describe('uploaded PDF documents (text layer)', () => {
     expect(dto.status).toBe('IN_REVIEW');
     expect(dto.review_tasks[0]).toMatchObject({ reason: 'LOW_CONFIDENCE' });
     expect(dto.review_tasks[0]!.note).toContain('GST_CERT.gst (unreadable');
+  });
+});
+
+describe('supplying missing documents while NEEDS_INFO (multipart PATCH, as the browser panel sends it)', () => {
+  const uploadsOnDisk = () => readdirSync(uploadDir);
+  const docPath = (id: string, type: string) =>
+    db.select().from(documentsTable).all().find((d) => d.applicationId === id && d.type === type)!.path;
+  const png = (name: string) => [image(name), { filename: name, contentType: 'image/png' }] as const;
+
+  /** ocr-pan.json's form with its GST + bank JSON documents, but no PAN card (and optionally no form PAN). */
+  async function submitWithoutPanCard({ withPan = true } = {}): Promise<string> {
+    let r = request(app).post('/applications').field('merchant_name', form.merchant_name);
+    if (withPan) r = r.field('pan', form.pan);
+    const res = await r
+      .field('gst', form.gst)
+      .field('bank_account', form.bank_account)
+      .field('ifsc', form.ifsc)
+      .field('documents', JSON.stringify(form.documents));
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  it('missing PAN card -> NEEDS_INFO asks for it -> uploaded image -> VERIFYING', async () => {
+    const id = await submitWithoutPanCard();
+    await drain();
+    let dto = await get(id);
+    expect(dto.status).toBe('NEEDS_INFO');
+    expect(dto.audit_log.at(-1)).toMatchObject({
+      event: 'INFO_REQUIRED',
+      detail: { requests: [{ code: 'MISSING_DOCUMENT', document: 'PAN_CARD', message: 'Please upload your PAN card.' }], documents: ['PAN_CARD'] },
+    });
+
+    const res = await request(app).patch(`/applications/${id}`).attach('PAN_CARD', ...png('pan-sharp.png'));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('EXTRACTING');
+    await drain();
+    dto = await get(id);
+    expect(dto.status).toBe('VERIFYING');
+    expect(ocr.calls).toBe(1);
+  });
+
+  it('missing form PAN and PAN card supplied together (fields + file in one PATCH; empty inputs ignored)', async () => {
+    const id = await submitWithoutPanCard({ withPan: false });
+    await drain();
+    expect((await get(id)).audit_log.at(-1)!.detail).toMatchObject({ form_fields: ['pan'], documents: ['PAN_CARD'] });
+    const res = await request(app).patch(`/applications/${id}`).field('pan', form.pan).field('ifsc', '').attach('PAN_CARD', ...png('pan-sharp.png'));
+    expect(res.status).toBe(200);
+    await drain();
+    expect((await get(id)).status).toBe('VERIFYING');
+  });
+
+  it('a blurry image supplied in NEEDS_INFO is an exception for a reviewer (IN_REVIEW BLURRY_DOCUMENT)', async () => {
+    const id = await submitWithoutPanCard();
+    await drain();
+    await request(app).patch(`/applications/${id}`).attach('PAN_CARD', ...png('pan-blurry.png')).expect(200);
+    await drain();
+    const dto = await get(id);
+    expect(dto.status).toBe('IN_REVIEW');
+    expect(dto.review_tasks[0]).toMatchObject({ reason: 'BLURRY_DOCUMENT' });
+  });
+
+  it('a replaced upload is deleted from disk', async () => {
+    // PAN card uploaded, bank proof missing -> NEEDS_INFO; the merchant sends both again.
+    const res0 = await request(app)
+      .post('/applications')
+      .field('merchant_name', form.merchant_name)
+      .field('pan', form.pan)
+      .field('gst', form.gst)
+      .field('bank_account', form.bank_account)
+      .field('ifsc', form.ifsc)
+      .field('documents', JSON.stringify(form.documents.filter((d: { type: string }) => d.type !== 'BANK_PROOF')))
+      .attach('PAN_CARD', ...png('pan-sharp.png'));
+    const id = res0.body.id as string;
+    await drain();
+    expect((await get(id)).status).toBe('NEEDS_INFO');
+    const oldPath = docPath(id, 'PAN_CARD')!;
+    expect(uploadsOnDisk()).toHaveLength(1);
+
+    await request(app)
+      .patch(`/applications/${id}`)
+      .attach('PAN_CARD', ...png('pan-sharp.png'))
+      .attach('BANK_PROOF', image('bank-proof.pdf'), { filename: 'bank.pdf', contentType: 'application/pdf' })
+      .expect(200);
+    expect(existsSync(oldPath)).toBe(false);
+    expect(uploadsOnDisk()).toHaveLength(2);
+    await drain();
+    expect((await get(id)).status).toBe('VERIFYING');
+  });
+
+  it('files are refused (409) outside NEEDS_INFO, and the uploaded file is removed', async () => {
+    const id = await submitWithPanImage('pan-sharp.png');
+    await drain(); // VERIFYING
+    const before = uploadsOnDisk();
+    const res = await request(app).patch(`/applications/${id}`).attach('PAN_CARD', ...png('pan-sharp.png'));
+    expect(res.status).toBe(409);
+    expect(uploadsOnDisk()).toEqual(before);
+  });
+
+  it('400 for an empty multipart PATCH, and for an unsupported file type', async () => {
+    const id = await submitWithoutPanCard();
+    await drain();
+    await request(app).patch(`/applications/${id}`).field('ifsc', '').expect(400);
+    await request(app)
+      .patch(`/applications/${id}`)
+      .attach('PAN_CARD', Buffer.from('MZ'), { filename: 'x.exe', contentType: 'application/octet-stream' })
+      .expect(400);
+    expect(uploadsOnDisk()).toHaveLength(0);
+  });
+});
+
+describe('demo samples (docs/REQUIREMENTS.md)', () => {
+  const json = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
+
+  it('missing.json -> NEEDS_INFO; uploading missing-gst-cert.pdf in the panel -> VERIFYING', async () => {
+    const res = await request(app).post('/applications').send(json('missing.json')).expect(201);
+    const id = res.body.id as string;
+    await drain();
+    expect((await get(id)).status).toBe('NEEDS_INFO');
+    await request(app)
+      .patch(`/applications/${id}`)
+      .attach('GST_CERT', image('missing-gst-cert.pdf'), { filename: 'gst.pdf', contentType: 'application/pdf' })
+      .expect(200);
+    await drain();
+    const dto = await get(id);
+    expect(dto.status).toBe('VERIFYING');
+    const gstDoc = dto.documents.find((d) => d.type === 'GST_CERT')!;
+    expect(dto.extracted_fields.filter((f) => f.document_id === gstDoc.id).map((f) => [f.field, f.validation_status])).toEqual([
+      ['gst', 'ok'],
+      ['legal_name', 'ok'],
+    ]);
+  });
+
+  it('low-confidence.json (an invalid IFSC on the bank proof) -> IN_REVIEW LOW_CONFIDENCE', async () => {
+    const res = await request(app).post('/applications').send(json('low-confidence.json')).expect(201);
+    await drain();
+    const dto = await get(res.body.id);
+    expect(dto.status).toBe('IN_REVIEW');
+    expect(dto.review_tasks.map((t) => t.reason)).toEqual(['LOW_CONFIDENCE']);
+    expect(dto.review_tasks[0]!.note).toContain('BANK_PROOF.ifsc (invalid_format, confidence 0.5)');
   });
 });
 

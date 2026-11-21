@@ -6,23 +6,25 @@ import type { OcrEngine } from './ocr.js';
 export const PAN_SHARP_OCR_TEXT =
   'INCOME TAX DEPARTMENT\nSAMPLE DOCUMENT - NOT VALID\n\nPermanent Account Number\nAAFCS4321M\n\nName\n\nSUNRISE TRADERS PVT LTD\nDate of Incorporation\n\n14/03/2019\n';
 
-/** An OcrEngine that returns fixed text and counts calls. */
-export function fakeOcr(text = PAN_SHARP_OCR_TEXT, confidence = 0.94): OcrEngine & { calls: number } {
+/** An OcrEngine that returns fixed text (and optional per-word confidences) and counts calls. */
+export function fakeOcr(
+  text = PAN_SHARP_OCR_TEXT,
+  confidence = 0.94,
+  words?: { text: string; confidence: number }[],
+): OcrEngine & { calls: number } {
   const engine = {
     calls: 0,
     async recognize() {
       engine.calls++;
-      return { text, confidence };
+      return { text, confidence, ...(words ? { words } : {}) };
     },
     async terminate() {},
   };
   return engine;
 }
 
-/** A one-page PDF with a Helvetica text layer, one line per entry. Hand-built: no PDF library needed. */
-export function textPdf(lines: readonly string[]): Buffer {
-  const esc = (t: string) => t.replace(/[\\()]/g, (c) => `\\${c}`);
-  const content = ['BT', '/F1 14 Tf', '18 TL', '72 770 Td', ...lines.map((l) => `(${esc(l)}) Tj T*`), 'ET'].join('\n');
+/** Wrap a content stream in a minimal one-page PDF (Helvetica as /F1). */
+function pdfWithContent(content: string): Buffer {
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -43,6 +45,13 @@ export function textPdf(lines: readonly string[]): Buffer {
   return Buffer.from(pdf, 'latin1');
 }
 
+/** A one-page PDF with a Helvetica text layer, one line per entry. Hand-built: no PDF library needed. */
+export function textPdf(lines: readonly string[]): Buffer {
+  const esc = (t: string) => t.replace(/[\\()]/g, (c) => `\\${c}`);
+  const content = ['BT', '/F1 14 Tf', '18 TL', '72 770 Td', ...lines.map((l) => `(${esc(l)}) Tj T*`), 'ET'].join('\n');
+  return pdfWithContent(content);
+}
+
 export const SAMPLE_GST_CERT = [
   'Government of India - Form GST REG-06',
   'SAMPLE DOCUMENT - NOT VALID',
@@ -61,3 +70,29 @@ export const SAMPLE_BANK_PROOF = [
   'IFSC: ICIC0004321',
   'Branch: Andheri East, Mumbai',
 ];
+
+/**
+ * A one-page PDF with text drawn at absolute positions, in the order given
+ * (so a test can draw a two-column layout column by column, as real bank
+ * statements do).
+ */
+export function positionedPdf(items: readonly { x: number; y: number; text: string }[]): Buffer {
+  const esc = (t: string) => t.replace(/[\\()]/g, (c) => `\\${c}`);
+  const content = ['BT', '/F1 11 Tf', ...items.map((i) => `1 0 0 1 ${i.x} ${i.y} Tm (${esc(i.text)}) Tj`), 'ET'].join('\n');
+  return pdfWithContent(content);
+}
+
+/** A bank statement header drawn like the real one: all labels first, then all values (fictitious data). */
+export const TWO_COLUMN_BANK_PDF_ITEMS = [
+  { x: 40, y: 760, text: 'Name: Mr. RAVI KUMAR' },
+  { x: 40, y: 740, text: 'CIF Number :' },
+  { x: 40, y: 724, text: 'Account No. :' },
+  { x: 40, y: 708, text: 'A/c Type :' },
+  { x: 320, y: 760, text: 'Branch Name: ANDHERI EAST' },
+  { x: 320, y: 740, text: 'IFSC: HDFCO001234' },
+  { x: 140, y: 740, text: '81234567890' },
+  { x: 140, y: 724, text: '50100234567891' },
+  { x: 140, y: 708, text: 'SAVINGS' },
+  { x: 320, y: 724, text: 'MICR: 400240002' },
+] as const;
+

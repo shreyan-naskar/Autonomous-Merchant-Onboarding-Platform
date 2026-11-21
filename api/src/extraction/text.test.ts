@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PAN_SHARP_OCR_TEXT } from './testkit.js';
-import { parseDocumentText } from './text.js';
+import { cleanName, parseDocumentText } from './text.js';
 
 describe('parseDocumentText', () => {
   it('PAN card: PAN by pattern, name from the line after the "Name" label', () => {
@@ -32,5 +32,68 @@ describe('parseDocumentText', () => {
 
   it('bank proof: an account number outside 9-18 digits is not taken', () => {
     expect(parseDocumentText('BANK_PROOF', 'Account Number: 1234 5678').account_number).toBeUndefined();
+  });
+});
+
+/*
+ * Layouts seen on a real PAN card (OCR) and a real bank statement PDF, with
+ * fictitious values. Each case failed before these fixes.
+ */
+describe('parseDocumentText on real-world layouts', () => {
+  // Bilingual PAN card: "नाम / Name" OCRs as junk before "Name"; OCR noise after the name.
+  const REAL_PAN_OCR = [
+    'Ae Re ae (aa 3)',
+    'INCOME TAX DEPARTMENT ~~ & GOVT. OF INDIA',
+    'Permanent Account Number Card Bxdz',
+    'ABCDE1234F ee',
+    'H/ Name a Rs',
+    'RAVI KUMAR Wid aA',
+    'faa 4 ATA/ Father\'s Name ama a SURESH ak',
+    'Date of Birth ~~ = /a',
+    '01/01/1990 ~~ ABC Signature',
+  ].join('\n');
+
+  it('PAN card: "Name" after bilingual junk; only the capitalized name words are kept', () => {
+    expect(parseDocumentText('PAN_CARD', REAL_PAN_OCR)).toEqual({ pan: 'ABCDE1234F', name: 'RAVI KUMAR' });
+  });
+
+  it('PAN card: a Father\'s Name that comes first is skipped', () => {
+    const text = "Father's Name\nSURESH KUMAR\nनाम / Name\nRAVI KUMAR\nABCDE1234F";
+    expect(parseDocumentText('PAN_CARD', text).name).toBe('RAVI KUMAR');
+  });
+
+  it('bank: two-column rows (tab = column break), title dropped, Branch Name skipped, IFSC O -> 0', () => {
+    const text = [
+      'Branch Name: ANDHERI EAST',
+      'Name: Mr. RAVI KUMAR\tCIF Number : 81234567890',
+      'Account No. : 50100234567891\tMICR: 400240002',
+      'A/c Type : SAVINGS',
+      'IFSC: HDFCO001234',
+    ].join('\n');
+    expect(parseDocumentText('BANK_PROOF', text)).toEqual({
+      account_number: '50100234567891',
+      ifsc: 'HDFC0001234',
+      account_holder: 'RAVI KUMAR',
+    });
+  });
+
+  it('bank: a label whose value is on the next line still works', () => {
+    expect(parseDocumentText('BANK_PROOF', 'Account Number\n5010 0234 5678 91').account_number).toBe('50100234567891');
+  });
+});
+
+describe('cleanName', () => {
+  it.each([
+    ['RAVI KUMAR Wid aA', 'RAVI KUMAR'],
+    ['Mr. RAVI KUMAR', 'RAVI KUMAR'],
+    ['M/s Lakshmi Textiles Pvt Ltd', 'Lakshmi Textiles Pvt Ltd'],
+    ['Lakshmi & Sons', 'Lakshmi & Sons'],
+    ['R. K. SHARMA 12/03', 'R. K. SHARMA'],
+  ])('%s -> %s', (raw, name) => {
+    expect(cleanName(raw)).toBe(name);
+  });
+
+  it.each(['a Rs', '81234567890', ': ~~', 'Mr.', 'Ab'])('rejects %s', (raw) => {
+    expect(cleanName(raw)).toBeNull();
   });
 });

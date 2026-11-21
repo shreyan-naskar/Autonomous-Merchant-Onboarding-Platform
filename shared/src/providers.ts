@@ -76,6 +76,8 @@ export const ChaosConfigSchema = z.object({
   dropCallback: z.boolean(),
   /** When > 0, callbacks are sent after this delay instead of delayMs (after the API's timeout). */
   lateCallbackMs: z.number().int().min(0).max(3_600_000),
+  /** Provider outage: every verify request is refused with 503 (nothing is sent back). */
+  outage: z.boolean(),
 });
 export type ChaosConfig = z.infer<typeof ChaosConfigSchema>;
 export const ChaosConfigPatchSchema = ChaosConfigSchema.partial().strict();

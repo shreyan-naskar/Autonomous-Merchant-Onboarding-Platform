@@ -52,6 +52,7 @@ export const api = {
   patch: <T>(path: string, json: unknown) => request<T>('/api', path, { method: 'PATCH', json }),
   /** multipart/form-data (the browser sets the boundary header). */
   postForm: <T>(path: string, form: FormData) => request<T>('/api', path, { method: 'POST', body: form }),
+  patchForm: <T>(path: string, form: FormData) => request<T>('/api', path, { method: 'PATCH', body: form }),
 }
 
 export const mockApi = {

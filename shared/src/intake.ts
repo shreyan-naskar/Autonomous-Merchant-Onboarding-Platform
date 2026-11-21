@@ -110,6 +110,16 @@ export const UpdateApplicationSchema = ApplicationFieldsSchema.partial()
   );
 export type UpdateApplication = z.infer<typeof UpdateApplicationSchema>;
 
+/**
+ * Multipart PATCH /applications/:id (merchant correcting a NEEDS_INFO
+ * application in the browser): form fields as text parts, optional
+ * `documents` JSON part, and files named after their document type. Whether
+ * anything was sent at all is checked by the route (files count too).
+ */
+export const UpdateApplicationMultipartFieldsSchema = ApplicationFieldsSchema.partial().extend({
+  documents: jsonText.pipe(StructuredDocumentListSchema).optional(),
+});
+
 export const ListReviewTasksQuerySchema = z.strictObject({
   status: z.enum(['OPEN', 'RESOLVED']).default('OPEN'),
   limit: z.coerce.number().int().min(1).max(500).default(200),

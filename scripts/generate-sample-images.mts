@@ -4,6 +4,8 @@
  *   pan-blurry.png  the same card with a Gaussian blur (fails the blur check)
  *   gst-cert.pdf    a text-layer GST certificate (pdf-parse, no OCR)
  *   bank-proof.pdf  a text-layer bank letter
+ *   missing-gst-cert.pdf  the GST certificate missing.json lacks (upload it
+ *                   in the "Information needed" panel to complete that app)
  *
  * The card is fake: it uses the identity of sample-data/ocr-pan.json, not a
  * real person or company. Run from the repo root:
@@ -49,7 +51,18 @@ async function main() {
   await sharp(sharpPng).blur(6).png().toFile(join(out, 'pan-blurry.png'));
   writeFileSync(join(out, 'gst-cert.pdf'), textPdf(SAMPLE_GST_CERT));
   writeFileSync(join(out, 'bank-proof.pdf'), textPdf(SAMPLE_BANK_PROOF));
-  console.log('wrote sample-data/pan-sharp.png, pan-blurry.png, gst-cert.pdf, bank-proof.pdf');
+  writeFileSync(
+    join(out, 'missing-gst-cert.pdf'),
+    textPdf([
+      'Government of India - Form GST REG-06',
+      'SAMPLE DOCUMENT - NOT VALID',
+      'Registration Certificate',
+      'Registration Number: 33AAECS3456R1Z1',
+      'Legal Name: Sunrise Bakery',
+      'Constitution of Business: Proprietorship',
+    ]),
+  );
+  console.log('wrote sample-data/pan-sharp.png, pan-blurry.png, gst-cert.pdf, bank-proof.pdf, missing-gst-cert.pdf');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

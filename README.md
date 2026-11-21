@@ -14,7 +14,7 @@ masked everywhere.
 - **Web** (`web/`, React 19 + Vite + Tailwind, port 5173): operator dashboard, review queue, merchant submit form, dead-letter view and demo controls.
 - **Shared** (`shared/`, Zod): wire schemas, the state machine table, validators and masking, used by all three.
 
-Brief: [docs/PROBLEM.md](docs/PROBLEM.md). Build plan: [docs/PLAN.md](docs/PLAN.md). Build log and decisions: [docs/PROGRESS.md](docs/PROGRESS.md). Live demo script: [docs/DEMO.md](docs/DEMO.md).
+Brief: [docs/PROBLEM.md](docs/PROBLEM.md). Build plan: [docs/PLAN.md](docs/PLAN.md). Build log and decisions: [docs/PROGRESS.md](docs/PROGRESS.md). **Every requirement and scenario of the brief, with how to demo it in the website: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).** Live demo script: [docs/DEMO.md](docs/DEMO.md).
 
 ## Quick start (Fedora)
 
@@ -152,7 +152,7 @@ API on `:3000` (JSON, snake_case). The web UI reaches it through the Vite proxy 
 | `POST /applications` | Submit. JSON `{merchant_name, pan, gst, bank_account, ifsc, documents:[{type, payload}]}`, or multipart with `PAN_CARD` / `GST_CERT` / `BANK_PROOF` files (PNG, JPEG, PDF, max 5 MB) plus an optional `documents` JSON field. Returns 201 with the detail. |
 | `GET /applications?status=&limit=` | List: status, time in state, open review count, merchant ID. |
 | `GET /applications/:id` | Detail: documents, extracted fields (confidence, validation status), verifications, callbacks, review tasks, audit log. Values masked. |
-| `PATCH /applications/:id` | Merchant edit. In `NEEDS_INFO`, fields and JSON documents restart extraction. A bank change after verification starts bank re-verification. Edits are refused (409) once approved. |
+| `PATCH /applications/:id` | Merchant edit, JSON or multipart (form fields as text parts, files named `PAN_CARD` / `GST_CERT` / `BANK_PROOF`, optional `documents` JSON part; this is what the "Information needed" panel sends). In `NEEDS_INFO`, fields, documents and files restart extraction; documents and files are refused (409) elsewhere, and a replaced upload is deleted. A bank change after verification starts bank re-verification. Edits are refused (409) once approved. |
 | `POST /applications/:id/review` | Operator decision `{taskId, resolution, note}`. `resolution` is one of `APPROVE`, `REJECT`, `REQUEST_INFO`, `RETRY_VERIFICATION`, `RETRY_MERCHANT_CREATION` or `DISMISS`. 409 for an illegal state or a failed approval guard; 400 without a note. |
 | `GET /review-tasks?status=OPEN\|RESOLVED` | Review queue across applications. |
 | `GET /jobs?status=dead` | Dead-letter jobs (payloads masked). |
@@ -168,7 +168,7 @@ Mock providers on `:4000` (web proxy `/mock`):
 | Method and path | Purpose |
 |---|---|
 | `POST /pan/verify`, `/gst/verify`, `/bank/verify`, `/risk/score` | Return 202 `{request_id}`, then call back the API with a signed `{event_id, request_id, kind, result, application_ref, bank_version?}` |
-| `GET/POST /admin/config` | Chaos settings: `delayMs`, `failKinds`, `duplicateCallback`, `dropCallback`, `lateCallbackMs` |
+| `GET/POST /admin/config` | Chaos settings: `delayMs`, `failKinds`, `duplicateCallback`, `dropCallback`, `lateCallbackMs`, `outage` (every verify request answered 503) |
 | `POST /admin/reset` | Restore the default settings |
 | `POST /admin/redeliver` | `{event_id?}`. Resend an already-delivered callback byte for byte (a provider retry) |
 
@@ -257,7 +257,7 @@ All settings are optional (see [.env.example](.env.example)). The root `.env` is
 | GST verification | `/gst/verify` | GSTIN ending in `Z9` fails (`GSTIN_INACTIVE`) |
 | Bank account verification | `/bank/verify` | Account ending in `0000` never answers (timeout path); echoes `bank_version` |
 | Risk scoring | `/risk/score` | Deterministic score 0-40; name containing `RISKY` scores 85 |
-| Provider failure modes | `/admin/config`, `/admin/redeliver` | Delay, forced failures, duplicate, dropped and late callbacks, single redelivery |
+| Provider failure modes | `/admin/config`, `/admin/redeliver` | Delay, forced failures, duplicate, dropped and late callbacks, outage (503), single redelivery |
 | Internal merchant ID service | `createSimulatedMerchantService` in the API | Issues `MID-XXXXXXXX`, idempotent per application, failure flag via `/admin/merchant-service` |
 | OCR | tesseract.js (real, local) | Real OCR, but on synthetic sample images |
 | Sample documents | `sample-data/` | Synthetic PAN card images and GST/bank PDFs marked "SAMPLE DOCUMENT - NOT VALID" |
@@ -268,8 +268,8 @@ All settings are optional (see [.env.example](.env.example)). The root `.env` is
 - **No authentication or roles.** Operator and merchant endpoints, plus the `/admin` demo controls, are open. `/admin/reset-data` is gated only by `DEMO_MODE`.
 - **No real encryption at rest.** PAN, GSTIN and account numbers are stored in plain text in SQLite and only masked when they leave the API (responses, logs).
 - **Polling, not push.** The UI refetches every 3s.
-- **Extraction is heuristic.** Text documents are parsed with patterns and labels. Scanned PDFs (no text layer) are not OCR'd. Only English OCR is supported, and the model is downloaded on first use.
-- **Uploads cannot be replaced.** `PATCH` accepts JSON documents only (in `NEEDS_INFO`), so a blurry upload is resolved by an operator, not re-uploaded. Changing PAN or GSTIN after verification does not re-verify them, and a bank change does not re-check the bank document. Edits do not re-run duplicate detection.
+- **Extraction is heuristic.** Text documents are parsed with patterns and labels (checked against one real bilingual PAN card and one real two-column bank statement; other layouts may need more labels). Scanned PDFs (no text layer) are not OCR'd. Only English OCR is supported, and the model is downloaded on first use.
+- **Documents can only be supplied in `NEEDS_INFO`.** Blurry or conflicting documents go to a reviewer (as the brief asks); the reviewer can send the application back with **Request info**, and the merchant then re-uploads in the panel. Changing PAN or GSTIN after verification does not re-verify them, and a bank change does not re-check the bank document. Edits do not re-run duplicate detection.
 - **Lost callbacks are not redelivered.** The mock never retries a failed delivery. If the API is down, that result is lost, and the API times out and asks again.
 - **Review reasons follow callback arrival order.** If GST's failure arrives before PAN's pass, the reason reads `PAN_PENDING_GST_FAILED`. The task note always lists every check.
 - **In-memory demo state.** The merchant-service failure flag and mock chaos settings reset on restart.
@@ -314,7 +314,7 @@ Other deviations:
 - `transition()` takes `db` (or a transaction) as its first argument.
 - Extra columns: `documents.payload`, `documents.blur_score`, `verifications.score`, `review_tasks.note`, `review_tasks.related_application_id`, `jobs.created_at/updated_at`. `audit_log.from_state` is null for the creation row and `to_state` is null for non-transition events. `callback_events.application_id` is not a foreign key, so callbacks with unknown references are still recorded.
 - Intake format-checks the form fields (400). Document values are only length-checked at intake; extraction flags bad values. Only `merchant_name` is required, with one document per type.
-- `PATCH` accepts form fields always (until approval) and JSON documents only in `NEEDS_INFO`. In `NEEDS_INFO`, a real change moves the app to `EXTRACTING` in one transaction (`INFO_SUPPLIED`); a no-op PATCH does nothing. Elsewhere, edits write `APPLICATION_UPDATED`.
+- `PATCH` accepts form fields always (until approval) and documents (JSON, or uploaded files via multipart) only in `NEEDS_INFO`. In `NEEDS_INFO`, a real change moves the app to `EXTRACTING` in one transaction (`INFO_SUPPLIED`); a no-op PATCH does nothing. Elsewhere, edits write `APPLICATION_UPDATED`.
 - Callback processing runs in the webhook's transaction instead of a separate job: storing and applying commit together. If applying fails, nothing is stored and the 500 invites redelivery.
 - The mock never retries a failed callback delivery. `/admin/redeliver` was added in Phase 8 for a single deliberate redelivery.
 - Review reasons are built when the first failure arrives (see Limitations).
@@ -326,6 +326,8 @@ Other deviations:
 - Root `vitest` also runs a `web` project (no tests; it passes with none). Web ESLint is broken by an upstream `@typescript-eslint` / TypeScript 6 incompatibility, so `tsc -b` is the web check.
 - Phase 7: `BLURRY_DOCUMENT` comes after the missing-info check. The OCR and PDF parsers cover all three document types, not just the PAN card. Scanned PDFs are not OCR'd. Open duplicate tasks hold auto-approval, which the plan did not specify. New resolution `DISMISS` closes informational tasks (any state except `IN_REVIEW`). Tesseract downloads its model on first use; offline, image extract jobs retry and then dead-letter (requeueable).
 - Phase 8: dead-letter requeue requires a note, like every other operator action. `POST /admin/reset-data` (demo mode only) lets `npm run demo` reset running services. A shared end-to-end test harness lives in `api/src/e2e.ts`.
+- After v1.0 (real documents): OCR field confidence is the confidence of the value's own words (a real card's page mean was 0.37 while its PAN read at 0.90); labels are found behind bilingual junk ("नाम / Name"); names drop titles and OCR noise; PDF text is rebuilt row by row from positions with pdfjs-dist (which pdf-parse wraps; pdf-parse cannot give positions, and two-column statements came out with labels far from their values); an IFSC printed with a letter O in 5th place is read as 0.
+- After v1.0 (demoing in the website): the "Information needed" panel shows plain-language requests with an input per missing form field and an upload per missing document (multipart `PATCH`); Demo controls gained **Provider outage** (mock answers 503: retries, then a dead letter) and **Delete all data** (`/admin/reset-data`, demo mode only); samples `low-confidence.json` and `missing-gst-cert.pdf`.
 
 ## Testing
 

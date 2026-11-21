@@ -40,6 +40,7 @@ beforeEach(() => {
 });
 afterEach(() => db.$client.close());
 
+
 /** Run worker ticks (advancing the clock 1s each) until no job is due. */
 async function drain(maxTicks = 20) {
   for (let i = 0; i < maxTicks; i++) {
@@ -268,5 +269,21 @@ describe('PATCH in NEEDS_INFO moves the application forward', () => {
     const res = await request(app).patch(`/applications/${id}`).send({ merchant_name: 'Ramesh Electricals Pvt Ltd' });
     expect(res.body).toMatchObject({ status: 'IN_REVIEW' });
     expect(res.body.audit_log.at(-1)).toMatchObject({ event: 'APPLICATION_UPDATED', to_state: null });
+  });
+});
+
+describe('missing-info requests for the merchant', () => {
+  it('NEEDS_INFO carries plain-language requests and what to offer in the panel', async () => {
+    const id = await submit(sample('missing.json'));
+    await drain();
+    expect((await get(id)).audit_log.at(-1)).toMatchObject({
+      event: 'INFO_REQUIRED',
+      detail: {
+        reason: 'MISSING_INFO',
+        requests: [{ code: 'MISSING_DOCUMENT', document: 'GST_CERT', message: 'Please upload your GST certificate.' }],
+        form_fields: [],
+        documents: ['GST_CERT'],
+      },
+    });
   });
 });

@@ -23,6 +23,7 @@ export const DEFAULT_CHAOS: ChaosConfig = {
   duplicateCallback: false,
   dropCallback: false,
   lateCallbackMs: 0,
+  outage: false,
 };
 
 export interface MockConfig {
@@ -127,6 +128,10 @@ export function createMockApp(config: MockConfig): MockApp {
 
   for (const kind of VERIFICATION_KINDS) {
     app.post(PROVIDER_PATHS[kind], (req, res) => {
+      if (chaos.outage) {
+        res.status(503).json({ error: 'PROVIDER_UNAVAILABLE', message: `${kind} provider is down (demo outage)` });
+        return;
+      }
       const parsed = PROVIDER_REQUEST_SCHEMAS[kind].safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'INVALID_REQUEST', issues: parsed.error.issues.map((i) => i.path.join('.')) });

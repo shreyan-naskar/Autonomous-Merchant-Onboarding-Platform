@@ -18,8 +18,10 @@ export interface DocumentReading {
   source: 'ocr' | 'pdf';
   /** Parsed values, or null when nothing could be read (blurry, corrupt, no text layer, unreadable file). */
   payload: Record<string, string> | null;
-  /** Confidence of the read (OCR mean confidence, or PDF_TEXT_CONFIDENCE), 0-1. Caps every field's confidence. */
+  /** Confidence of the read (OCR page mean, or PDF_TEXT_CONFIDENCE), 0-1. Used for fields without their own. */
   confidence: number;
+  /** Per payload key: OCR confidence of the words that make up that value (images only). */
+  fieldConfidence?: Record<string, number>;
   blurScore?: number;
   blurry?: boolean;
   /** Why the file could not be read (no values, never file contents). */
@@ -63,8 +65,31 @@ async function readImage(type: DocumentType, file: Buffer, deps: ReadDeps): Prom
     return { source: 'ocr', payload: null, confidence: 0, blurScore: score, blurry: true };
   }
   // OCR errors (e.g. model download failed) propagate: the worker retries the job.
-  const { text, confidence } = await deps.ocr.recognize(file);
-  return { source: 'ocr', payload: parseDocumentText(type, text), confidence, blurScore: score, blurry: false };
+  const { text, confidence, words } = await deps.ocr.recognize(file);
+  const payload = parseDocumentText(type, text);
+  const fieldConfidence = words?.length
+    ? Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, valueConfidence(v, words, confidence)]))
+    : undefined;
+  return { source: 'ocr', payload, confidence, ...(fieldConfidence ? { fieldConfidence } : {}), blurScore: score, blurry: false };
+}
+
+/** Comparable form of a word: upper case, letters and digits only, O read as 0. */
+const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0');
+
+/**
+ * Confidence of one extracted value: the lowest confidence among its words,
+ * each matched to the best-scoring OCR word with the same text. Falls back
+ * to the page confidence when a word cannot be found (e.g. the value was
+ * normalized after OCR).
+ */
+export function valueConfidence(value: string, words: readonly { text: string; confidence: number }[], fallback: number): number {
+  let min = 1;
+  for (const token of value.split(/\s+/).map(norm).filter(Boolean)) {
+    const matches = words.filter((w) => norm(w.text) === token);
+    if (matches.length === 0) return fallback;
+    min = Math.min(min, Math.max(...matches.map((w) => w.confidence)));
+  }
+  return Math.round(min * 100) / 100;
 }
 
 async function readPdf(type: DocumentType, file: Buffer): Promise<DocumentReading> {
