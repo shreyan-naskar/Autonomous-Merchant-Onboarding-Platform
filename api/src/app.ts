@@ -1,3 +1,4 @@
+import { redactText } from '@app/shared';
 import express, { type Express } from 'express';
 import type { Config } from './config.js';
 import type { Db } from './db/client.js';
@@ -37,7 +38,7 @@ export function createApp(deps: AppDeps): Express {
     const start = process.hrtime.bigint();
     res.on('finish', () => {
       const ms = Number(process.hrtime.bigint() - start) / 1e6;
-      logger.debug({ method: req.method, path: req.originalUrl.split('?')[0], status: res.statusCode, ms }, 'request');
+      logger.debug({ method: req.method, path: redactText(req.originalUrl.split('?')[0] ?? ''), status: res.statusCode, ms }, 'request');
     });
     next();
   });

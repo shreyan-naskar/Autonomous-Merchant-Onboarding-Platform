@@ -2,14 +2,15 @@ import { describeReason } from '@app/shared'
 import { CheckCircle2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { TaskCard } from '../components/review.tsx'
-import { EmptyState, ErrorAlert, PageHeader, Skeleton, cx } from '../components/ui.tsx'
+import { PageError } from '../components/errors.tsx'
+import { EmptyState, PageHeader, Skeleton, cx } from '../components/ui.tsx'
 import { useOpenTasks } from '../lib/queries.ts'
 
 type Filter = 'all' | 'danger' | 'warning' | 'info'
 
 /** Open exceptions across all applications, oldest first, as cards with actions. */
 export function ReviewQueue() {
-  const { data, error, isPending } = useOpenTasks()
+  const { data, error, isPending, refetch } = useOpenTasks()
   const [filter, setFilter] = useState<Filter>('all')
   const items = data?.items ?? []
   const shown = useMemo(() => (filter === 'all' ? items : items.filter((t) => describeReason(t.reason).severity === filter)), [items, filter])
@@ -18,8 +19,9 @@ export function ReviewQueue() {
   return (
     <>
       <PageHeader title="Review queue" subtitle="Exceptions waiting for a person to decide, oldest first. Every decision needs a note for the audit trail." />
-      {error && !data && <ErrorAlert error={error} />}
-      {isPending ? (
+      {error && !data ? (
+        <PageError error={error} onRetry={() => void refetch()} />
+      ) : isPending ? (
         <div className="grid gap-3 lg:grid-cols-2" role="status" aria-label="Loading review tasks">
           {Array.from({ length: 4 }, (_, i) => (
             <Skeleton key={i} className="h-40" />

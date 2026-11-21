@@ -54,12 +54,18 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     }
 
     const log = status >= 500 ? logger.error.bind(logger) : logger.warn.bind(logger);
-    log({ err, method: req.method, path: req.originalUrl.split('?')[0], status }, 'request failed');
+    // The path can contain a PAN or account number (typed into a URL): redact it.
+    log({ err, method: req.method, path: redactText(req.originalUrl.split('?')[0] ?? ''), status }, 'request failed');
 
     res.status(status).json(body);
   };
 }
 
+/**
+ * Unknown routes: JSON 404 (never Express's HTML page). The path is echoed
+ * for debugging but redacted, since a PAN or account number can end up in a
+ * URL.
+ */
 export const notFoundHandler: RequestHandler = (req, res) => {
-  res.status(404).json({ error: { code: 'NOT_FOUND', message: `No route ${req.method} ${req.path}` } });
+  res.status(404).json({ error: { code: 'NOT_FOUND', message: redactText(`No route ${req.method} ${req.path}`) } });
 };

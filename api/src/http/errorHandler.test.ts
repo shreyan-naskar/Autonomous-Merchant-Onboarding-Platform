@@ -93,4 +93,33 @@ describe('central error handler', () => {
     expect(all).not.toContain(PAN);
     expect(all).not.toContain(ACCT);
   });
+
+  it('unknown routes answer a JSON 404 {error:{code:NOT_FOUND, message}}, not an HTML page', async () => {
+    const { app } = makeApp();
+    for (const [method, path] of [
+      ['get', '/no/such/route'],
+      ['post', '/applications/x/y/z'],
+      ['delete', '/applications'],
+    ] as const) {
+      const res = await request(app)[method](path);
+      expect(res.status).toBe(404);
+      expect(res.headers['content-type']).toMatch(/application\/json/);
+      expect(res.body).toEqual({ error: { code: 'NOT_FOUND', message: expect.stringContaining('No route') } });
+      expect(res.text).not.toMatch(/<html|<pre>/i);
+    }
+  });
+
+  it('never echoes a raw PAN or account number from the URL, query or body in an error', async () => {
+    const { app, logs } = makeApp();
+    const responses = [
+      await request(app).get(`/lookup/${PAN}/${ACCT}`),
+      await request(app).get(`/applications/${PAN}`),
+      await request(app).post('/validate').send({ pan: `${PAN}!`, bank_account: `${ACCT}x` }),
+      await request(app).post('/applications').send({ merchant_name: 'Test', pan: `${PAN}0`, bank_account: `${ACCT}12345` }),
+    ];
+    for (const res of responses) expect(res.status).toBeGreaterThanOrEqual(400);
+    const all = responses.map((r) => r.text).join('') + logs.join('');
+    expect(all).not.toContain(PAN);
+    expect(all).not.toContain(ACCT);
+  });
 });

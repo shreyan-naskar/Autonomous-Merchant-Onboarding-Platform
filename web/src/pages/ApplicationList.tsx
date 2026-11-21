@@ -3,7 +3,8 @@ import { ArrowDown, ArrowUp, ChevronsUpDown, FilePlus2, Inbox, Search, SearchX }
 import { useMemo, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { MetricsStrip } from '../components/MetricsStrip.tsx'
-import { Button, Card, EmptyState, ErrorAlert, PageHeader, SkeletonRows, Switch, cx } from '../components/ui.tsx'
+import { PageError } from '../components/errors.tsx'
+import { Button, Card, EmptyState, PageHeader, SkeletonRows, Switch, cx } from '../components/ui.tsx'
 import { duration, relativeTime } from '../lib/format.ts'
 import { NEEDS_ATTENTION, StatusBadge } from '../lib/labels.tsx'
 import { useApplications } from '../lib/queries.ts'
@@ -23,7 +24,7 @@ export function ApplicationList() {
   const sort = (params.get('sort') as SortKey | null) ?? 'submitted'
   const dir = params.get('dir') === 'asc' ? 'asc' : 'desc'
   const navigate = useNavigate()
-  const { data, error, isPending } = useApplications()
+  const { data, error, isPending, refetch } = useApplications()
 
   const set = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params)
@@ -100,7 +101,7 @@ export function ApplicationList() {
 
         {error && !data ? (
           <div className="p-4">
-            <ErrorAlert error={error} />
+            <PageError error={error} onRetry={() => void refetch()} />
           </div>
         ) : isPending ? (
           <div className="p-4">

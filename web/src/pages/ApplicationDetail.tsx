@@ -4,14 +4,20 @@ import { ClipboardCheck, FileQuestion, Hourglass, RotateCcw } from 'lucide-react
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { BankDetails, DocumentsList, ExtractedFields, Stepper, Timeline, VerificationCards } from '../components/application.tsx'
+import { PageError } from '../components/errors.tsx'
 import { MissingInfoPanel } from '../components/MissingInfoPanel.tsx'
 import { TaskActions, TaskCard } from '../components/review.tsx'
 import { useToast } from '../components/toast.tsx'
-import { Button, Card, CopyButton, ErrorAlert, PageHeader, Skeleton, TabPanel, Tabs, cx } from '../components/ui.tsx'
+import { Button, Card, CopyButton, PageHeader, Skeleton, TabPanel, Tabs, cx } from '../components/ui.tsx'
 import { api } from '../lib/api.ts'
 import { duration, relativeTime } from '../lib/format.ts'
 import { StatusBadge } from '../lib/labels.tsx'
 import { qk } from '../lib/queries.ts'
+import { NotFound } from './NotFound.tsx'
+
+/** Application ids are UUIDs; anything else cannot exist, so it is a 404 without asking the API. */
+export const APPLICATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const missing = (id: string) => `Application ${id} doesn't exist. It may have been deleted, or the link is wrong.`
 
 type TabId = 'overview' | 'timeline' | 'documents' | 'bank'
 const TAB_IDS: readonly TabId[] = ['overview', 'timeline', 'documents', 'bank']
@@ -22,14 +28,17 @@ export function ApplicationDetail() {
   const tab = (TAB_IDS as readonly string[]).includes(params.get('tab') ?? '') ? (params.get('tab') as TabId) : 'overview'
   const setTab = (t: TabId) => setParams(t === 'overview' ? {} : { tab: t }, { replace: true })
 
-  const { data: app, error, isPending } = useQuery({
+  const validId = APPLICATION_ID_RE.test(id)
+  const { data: app, error, isPending, refetch } = useQuery({
     queryKey: qk.application(id),
     queryFn: () => api.get<ApplicationDetailDto>(`/applications/${id}`),
+    enabled: validId,
   })
   const flash = useStatusChange(app)
 
+  if (!validId) return <NotFound title="Application not found" message={missing(id)} />
   if (isPending) return <DetailSkeleton />
-  if (!app) return <ErrorAlert error={error} />
+  if (!app) return <PageError error={error} onRetry={() => void refetch()} notFoundTitle="Application not found" notFoundMessage={missing(id)} />
 
   const openTasks = app.review_tasks.filter((t) => t.status === 'OPEN')
   const goTo = (target: string) => {

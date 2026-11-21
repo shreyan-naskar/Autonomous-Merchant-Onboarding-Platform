@@ -80,7 +80,6 @@ export function ReviewDialog({
   const [note, setNote] = useState('')
   const resolve = useMutation({
     mutationFn: () => api.post<ApplicationDetailDto>(`/applications/${applicationId}/review`, { taskId: task.id, resolution, note }),
-    meta: { inline: true },
     onSuccess: async () => {
       toast.push({ tone: 'success', title: DONE[resolution], message: merchantName })
       setNote('')

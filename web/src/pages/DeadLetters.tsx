@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArchiveX, ArrowRight, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { PageError } from '../components/errors.tsx'
 import { useToast } from '../components/toast.tsx'
 import { Badge, Button, Card, Dialog, EmptyState, ErrorAlert, PageHeader, SkeletonRows, Textarea } from '../components/ui.tsx'
 import { api, fieldErrors } from '../lib/api.ts'
@@ -23,7 +24,7 @@ const JOB_NAMES: Record<string, string> = {
  * the job due now.
  */
 export function DeadLetters() {
-  const { data, error, isPending } = useDeadJobs()
+  const { data, error, isPending, refetch } = useDeadJobs()
   const [requeue, setRequeue] = useState<DeadJobDto | null>(null)
   return (
     <>
@@ -31,7 +32,7 @@ export function DeadLetters() {
       <Card padded={false}>
         {error && !data ? (
           <div className="p-4">
-            <ErrorAlert error={error} />
+            <PageError error={error} onRetry={() => void refetch()} />
           </div>
         ) : isPending ? (
           <div className="p-4">

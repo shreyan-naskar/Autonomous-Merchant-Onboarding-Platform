@@ -1,4 +1,4 @@
-import { ProviderCallbackSchema, SIGNATURE_HEADER } from '@app/shared';
+import { ProviderCallbackSchema, SIGNATURE_HEADER, redactText } from '@app/shared';
 import express, { Router } from 'express';
 import type { Db } from '../../db/client.js';
 import type { Logger } from '../../logger.js';
@@ -22,7 +22,7 @@ export function webhooksRouter(deps: WebhookDeps): Router {
   router.post('/provider', express.raw({ type: () => true, limit: '64kb' }), (req, res) => {
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     if (!verifySignature(deps.hmacSecret, raw, req.get(SIGNATURE_HEADER))) {
-      deps.logger.warn({ path: req.originalUrl, bytes: raw.length }, 'webhook rejected: bad signature');
+      deps.logger.warn({ path: redactText(req.originalUrl), bytes: raw.length }, 'webhook rejected: bad signature');
       res.status(401).json({ error: { code: 'BAD_SIGNATURE', message: 'Invalid or missing signature' } });
       return;
     }
