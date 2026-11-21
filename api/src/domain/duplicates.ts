@@ -18,19 +18,15 @@ export interface DuplicateMatch {
   matchedOn: DuplicateKey[];
 }
 
-/** At most this many tasks per submission (oldest matches first). */
 export const MAX_DUPLICATE_TASKS = 5;
 
-/** Codes: uppercase, no whitespace. */
 export const normalizeCode = (v: string | null | undefined) => (v ? v.replace(/\s+/g, '').toUpperCase() : null);
-/** Account numbers: digits only (drops spaces and dashes). */
 export const normalizeAccount = (v: string | null | undefined) => (v ? v.replace(/[^0-9]/g, '') : null);
 
 // The same normalization in SQL, applied to stored values.
 const codeSql = (col: SQLWrapper) => sql`upper(replace(${col}, ' ', ''))`;
 const accountSql = sql`replace(replace(${applications.bankAccount}, ' ', ''), '-', '')`;
 
-/** Other applications sharing the PAN, the GSTIN, or the account + IFSC pair. Oldest first. */
 export function findDuplicates(tx: Db | Tx, app: Application): DuplicateMatch[] {
   const pan = normalizeCode(app.pan);
   const gst = normalizeCode(app.gst);
@@ -63,11 +59,7 @@ export function findDuplicates(tx: Db | Tx, app: Application): DuplicateMatch[] 
 
 const LABEL: Record<DuplicateKey, string> = { pan: 'PAN', gst: 'GSTIN', bank: 'bank account + IFSC' };
 
-/**
- * Open POSSIBLE_DUPLICATE tasks on `app` for each match and audit both sides
- * (non-transition rows, to_state null). Field names only, never values.
- * Runs inside the submit transaction.
- */
+/** Audits both applications, naming the matched fields, never their values. */
 export function flagDuplicates(tx: Tx, app: Application, now: number): DuplicateMatch[] {
   const matches = findDuplicates(tx, app).slice(0, MAX_DUPLICATE_TASKS);
   for (const m of matches) {

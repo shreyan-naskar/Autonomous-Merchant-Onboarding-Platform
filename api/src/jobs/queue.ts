@@ -4,16 +4,12 @@ import type { Tx } from '../domain/guards.js';
 import { jobs } from '../db/schema.js';
 
 export interface EnqueueOptions {
-  /** Epoch ms; defaults to `now` (run as soon as the worker polls). */
   runAt?: number;
   maxAttempts?: number;
   now?: number;
 }
 
-/**
- * Add a job to the DB-backed queue. Pass the caller's transaction so the job
- * commits (or rolls back) together with the state change that caused it.
- */
+/** Pass the caller's transaction so the job commits or rolls back with the state change that caused it. */
 export function enqueueJob(db: Db | Tx, type: JobType, payload: Record<string, unknown>, opts: EnqueueOptions = {}) {
   const now = opts.now ?? Date.now();
   return db

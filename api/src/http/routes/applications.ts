@@ -46,7 +46,6 @@ function toInput(f: ApplicationFields | UpdateApplication): Partial<NewApplicati
   return { merchantName: f.merchant_name, pan: f.pan, gst: f.gst, bankAccount: f.bank_account, ifsc: f.ifsc };
 }
 
-/** HTML forms send empty inputs as ""; treat those as absent. */
 function dropEmpty(body: Record<string, unknown> | undefined): Record<string, unknown> {
   return Object.fromEntries(Object.entries(body ?? {}).filter(([, v]) => v !== ''));
 }
@@ -57,11 +56,9 @@ function uploadedFiles(req: Request): Express.Multer.File[] {
 }
 
 export function applicationsRouter({ db, logger, config, uploadDir, now }: ApplicationsRouterDeps): Router {
-  // Multipart only; multer passes JSON requests straight through. Files are
-  // stored under a random name: the client's file name is never used on disk.
+  // Files are stored under a random name: the client's file name never reaches the disk.
   const upload = multer({
     storage: multer.diskStorage({
-      // Created on first upload rather than at startup.
       destination: (_req, _file, cb) => {
         mkdirSync(uploadDir, { recursive: true });
         cb(null, uploadDir);
@@ -111,7 +108,7 @@ export function applicationsRouter({ db, logger, config, uploadDir, now }: Appli
       const detail = getApplicationDetail(db, app.id)!;
       res.status(201).location(`/applications/${app.id}`).json(toDetailDto(detail, now()));
     } catch (err) {
-      // Nothing references the saved files if intake failed; remove them.
+      // Intake failed, so nothing references the saved files.
       await Promise.all(files.map((f) => unlink(f.path).catch(() => undefined)));
       throw err;
     }
@@ -131,7 +128,6 @@ export function applicationsRouter({ db, logger, config, uploadDir, now }: Appli
     res.json(toDetailDto(detail, now()));
   });
 
-  /** Upload paths currently stored for these document types (replaced files are deleted after a successful PATCH). */
   const storedPaths = (appId: string, types: DocumentType[]) =>
     types.length === 0
       ? []
@@ -144,14 +140,7 @@ export function applicationsRouter({ db, logger, config, uploadDir, now }: Appli
   const stillReferenced = (path: string) =>
     db.select({ id: documentsTable.id }).from(documentsTable).where(eq(documentsTable.path, path)).get() !== undefined;
 
-  /**
-   * Merchant edits. JSON: any subset of the form fields and/or structured
-   * documents. Multipart (the browser's correction panel): form fields as text
-   * parts, an optional `documents` JSON part, and files named PAN_CARD /
-   * GST_CERT / BANK_PROOF. Documents and files are only accepted in NEEDS_INFO
-   * (409 elsewhere); each replaces the document of its type, and a replaced
-   * upload is deleted from disk.
-   */
+  /** Documents and files are only accepted in NEEDS_INFO; a replaced upload is deleted from disk. */
   router.patch('/:id', upload, async (req, res) => {
     const files = uploadedFiles(req);
     try {
@@ -179,7 +168,6 @@ export function applicationsRouter({ db, logger, config, uploadDir, now }: Appli
 
       const replaced = storedPaths(req.params.id as string, docs.map((d) => d.type));
       const app = updateApplication(db, req.params.id as string, { ...toInput(fields), documents: docs }, { now: now() });
-      // Old uploads that no document points to any more: remove them (best effort).
       await Promise.all(replaced.filter((p) => !stillReferenced(p)).map((p) => unlink(p).catch(() => undefined)));
       logger.info(
         { application_id: app.id, via, fields: Object.keys(fields), document_types: docs.map((d) => d.type), status: app.status },
@@ -187,14 +175,11 @@ export function applicationsRouter({ db, logger, config, uploadDir, now }: Appli
       );
       res.json(toDetailDto(getApplicationDetail(db, app.id)!, now()));
     } catch (err) {
-      // Nothing references files saved by a failed PATCH; remove them.
       await Promise.all(files.map((f) => unlink(f.path).catch(() => undefined)));
       throw err;
     }
   });
 
-  // Operator decision on an open review task. 409 with a readable message when
-  // a guard blocks it (e.g. approval before all checks pass) or the state forbids it.
   router.post('/:id/review', (req, res) => {
     const body = ReviewRequestSchema.parse(req.body);
     const app = resolveReview(db, config, req.params.id, body, now());

@@ -6,7 +6,6 @@ import { transition } from '../domain/transition.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { currentVerification } from './latest.js';
 
-/** Label of one check in a review reason: PASSED reads as OK; no row yet reads as PENDING. */
 export type CheckLabel = 'OK' | 'FAILED' | 'PENDING' | 'TIMED_OUT';
 
 export type CheckStates = Record<VerificationKind, VerificationStatus | undefined>;
@@ -19,13 +18,7 @@ export type VerificationDecision =
 const label = (s: VerificationStatus | undefined): CheckLabel =>
   s === 'PASSED' ? 'OK' : s === 'FAILED' ? 'FAILED' : s === 'TIMED_OUT' ? 'TIMED_OUT' : 'PENDING';
 
-/**
- * Review reason naming the checks, built from the results: each required
- * check in canonical order (PAN, GST, BANK, RISK) as `<KIND>_<LABEL>`, up to
- * and including the last failed one. E.g. PAN passed + GST failed ->
- * `PAN_OK_GST_FAILED`; only BANK failed -> `PAN_OK_GST_OK_BANK_FAILED`.
- * Null when nothing failed.
- */
+/** Names each check up to the last failed one, e.g. `PAN_OK_GST_FAILED`. Null when nothing failed. */
 export function failureReason(states: CheckStates, order: readonly VerificationKind[] = REQUIRED_CHECKS): string | null {
   let lastFailed = -1;
   order.forEach((k, i) => {
@@ -38,7 +31,6 @@ export function failureReason(states: CheckStates, order: readonly VerificationK
     .join('_');
 }
 
-/** Pure decision: all PASSED -> VERIFIED; any FAILED -> IN_REVIEW; otherwise wait. */
 export function decideVerification(states: CheckStates, order: readonly VerificationKind[] = REQUIRED_CHECKS): VerificationDecision {
   const reason = failureReason(states, order);
   if (reason) return { to: 'IN_REVIEW', reason, failed: order.filter((k) => states[k] === 'FAILED') };
@@ -51,7 +43,6 @@ export type EvaluateResult =
   | { action: 'VERIFIED' }
   | { action: 'IN_REVIEW'; reason: string };
 
-/** Human-readable per-check summary for the review task (no PAN/account values). */
 function describeChecks(current: Partial<Record<VerificationKind, Verification>>): string {
   return REQUIRED_CHECKS.map((k) => {
     const v = current[k];
@@ -63,11 +54,7 @@ function describeChecks(current: Partial<Record<VerificationKind, Verification>>
   }).join('; ');
 }
 
-/**
- * A BANK_CHANGED task only flags that the bank is being re-verified; once
- * every check passes again (new bank_version included) it is resolved
- * automatically (resolution AUTO_REVERIFIED) so it does not linger in the queue.
- */
+/** A BANK_CHANGED task is only a flag; once every check passes again it resolves itself so it does not linger in the queue. */
 function resolveBankChangedTasks(tx: Tx, appId: string, bankVersion: number, now: number) {
   const resolved = tx
     .update(reviewTasks)
@@ -94,14 +81,7 @@ function resolveBankChangedTasks(tx: Tx, appId: string, bankVersion: number, now
     .run();
 }
 
-/**
- * Re-evaluate an application after a verification changed. Only acts in
- * VERIFYING (callbacks arriving in IN_REVIEW or later are recorded but do
- * not move the application). All required checks PASSED -> VERIFIED plus an
- * `approve` job; any FAILED -> IN_REVIEW plus a review task whose reason
- * names the checks (see failureReason); otherwise stays in VERIFYING.
- * Runs inside the caller's transaction.
- */
+/** Only acts in VERIFYING: callbacks that arrive while a person is reviewing are recorded but never move the application. */
 export function evaluate(tx: Tx, appId: string, now: number): EvaluateResult {
   const app = tx.select().from(applications).where(eq(applications.id, appId)).get();
   if (!app) return { action: 'none', reason: 'application not found' };

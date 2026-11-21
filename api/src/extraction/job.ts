@@ -27,11 +27,7 @@ const describeProblem = (p: FieldProblem) =>
     .filter(Boolean)
     .join(', ')})`;
 
-/**
- * Audit detail for the post-extraction transition. Field names, issues and
- * merchant-facing messages only, never values. For NEEDS_INFO it is an
- * InfoRequestDetail (shared): the web panel renders it.
- */
+/** Field names and issues only, never values. */
 function auditDetail(d: ExtractionDecision, threshold: number, blurThreshold: number) {
   switch (d.reason) {
     case 'MISSING_INFO': {
@@ -73,15 +69,7 @@ function reviewNote(d: ExtractionDecision, blurThreshold: number): string {
   }
 }
 
-/**
- * The `extract` job. SUBMITTED -> EXTRACTING, then reads uploaded images
- * (blur check + OCR, outside any transaction), then in one transaction:
- * replace extracted_fields, transition to the decided state, open a review
- * task for IN_REVIEW, and enqueue `start_verifications` for VERIFYING.
- *
- * Idempotent: a retry finds the app in EXTRACTING and redoes the work; a
- * stale job (app already moved on) is a no-op.
- */
+/** Idempotent: a retry finds the application in EXTRACTING and redoes the work; a stale job is a no-op. */
 export async function runExtraction(
   deps: ExtractionDeps,
   ocr: OcrEngine,

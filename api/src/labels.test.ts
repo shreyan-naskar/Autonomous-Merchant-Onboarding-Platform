@@ -5,12 +5,7 @@ import { allReviewReasons, VERIFICATION_KINDS, VERIFICATION_STATUSES, type Verif
 import { describe, expect, it } from 'vitest';
 import { failureReason } from './verification/evaluate.js';
 
-/*
- * The web app turns review task reasons into plain language using the list
- * in shared/src/labels.ts (allReviewReasons). This proves the API can only
- * create reasons on that list; web/src/lib/labels.test.ts proves every one
- * has a label.
- */
+/* The API can only create reasons on allReviewReasons(); web/src/lib/labels.test.tsx proves each has a label. */
 
 const SRC = fileURLToPath(new URL('.', import.meta.url));
 const known = new Set(allReviewReasons());

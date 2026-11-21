@@ -1,10 +1,6 @@
 import { z } from 'zod';
 
-/**
- * Domain vocabulary shared by api and web. The API's `transition()` is the
- * only writer of application status and enforces ALLOWED_TRANSITIONS; the
- * web app uses the same map to decide which operator actions to offer.
- */
+/** The API's transition() is the only writer of application status and enforces ALLOWED_TRANSITIONS. */
 
 export const APPLICATION_STATUSES = [
   'SUBMITTED',
@@ -21,7 +17,6 @@ export const APPLICATION_STATUSES = [
 export const ApplicationStatusSchema = z.enum(APPLICATION_STATUSES);
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
 
-/** Every legal edge. Anything not listed here is rejected by `transition()`. */
 export const ALLOWED_TRANSITIONS = {
   SUBMITTED: ['EXTRACTING'],
   EXTRACTING: ['NEEDS_INFO', 'VERIFYING', 'IN_REVIEW'],
@@ -43,15 +38,11 @@ export function isTerminal(status: ApplicationStatus): boolean {
   return ALLOWED_TRANSITIONS[status].length === 0;
 }
 
-/** Who caused an audit entry. */
 export const ACTORS = ['system', 'operator', 'provider', 'merchant'] as const;
 export const ActorSchema = z.enum(ACTORS);
 export type Actor = z.infer<typeof ActorSchema>;
 
-/**
- * Audit event names. Transition events and non-transition events (late or
- * duplicate callbacks, job failures) share one log.
- */
+/** Transitions and non-transition events (late callbacks, job failures) share one log. */
 export const AUDIT_EVENTS = [
   'APPLICATION_SUBMITTED',
   'APPLICATION_UPDATED',
@@ -95,7 +86,7 @@ export const VERIFICATION_KINDS = ['PAN', 'GST', 'BANK', 'RISK'] as const;
 export const VerificationKindSchema = z.enum(VERIFICATION_KINDS);
 export type VerificationKind = z.infer<typeof VerificationKindSchema>;
 
-/** Checks that must be PASSED (for the current bank_version) before APPROVED. */
+/** All must be PASSED, BANK for the current bank_version, before APPROVED. */
 export const REQUIRED_CHECKS: readonly VerificationKind[] = VERIFICATION_KINDS;
 
 export const VERIFICATION_STATUSES = ['PENDING', 'PASSED', 'FAILED', 'TIMED_OUT'] as const;
@@ -114,7 +105,6 @@ export const JOB_STATUSES = ['queued', 'running', 'done', 'failed', 'dead'] as c
 export const JobStatusSchema = z.enum(JOB_STATUSES);
 export type JobStatus = z.infer<typeof JobStatusSchema>;
 
-/** Background job types handled by the API worker. */
 export const JOB_TYPES = [
   'extract',
   'start_verifications',

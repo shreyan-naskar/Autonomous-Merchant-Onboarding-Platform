@@ -3,26 +3,19 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { merchantAccounts } from '../db/schema.js';
 
-/** The internal service that issues merchant IDs. */
 export interface MerchantService {
-  /**
-   * Issue (or return the already-issued) merchant ID for an application.
-   * Idempotent per application: calling it again never creates a second ID.
-   * Rejects when the service is unavailable.
-   */
+  /** Idempotent per application: asking again never issues a second ID. */
   createMerchant(applicationId: string, now: number): Promise<{ merchantId: string; created: boolean }>;
 }
 
 export interface SimulatedMerchantService extends MerchantService {
-  /** When true every call fails, simulating an outage. Settable at runtime (POST /admin/merchant-service). */
+  /** Demo switch: every call fails while true. */
   fail: boolean;
-  /** Calls received (including failed ones), for tests and the demo. */
   readonly calls: number;
 }
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
-/** `MID-` + 8 random uppercase alphanumerics. */
 export function generateMerchantId(pick: (n: number) => number = randomInt): string {
   let s = '';
   for (let i = 0; i < 8; i++) s += ALPHABET[pick(ALPHABET.length)];
@@ -36,12 +29,7 @@ export class MerchantServiceUnavailableError extends Error {
   }
 }
 
-/**
- * Simulated internal merchant ID service. Its ledger is the
- * `merchant_accounts` table: the MID is the primary key (globally unique) and
- * `application_id` is unique, which is the idempotency key. A random ID that
- * collides with an existing one is regenerated.
- */
+/** The ledger is merchant_accounts: a unique application_id is the idempotency key. */
 export function createSimulatedMerchantService(
   db: Db,
   { fail = false, generate = () => generateMerchantId() }: { fail?: boolean; generate?: () => string } = {},

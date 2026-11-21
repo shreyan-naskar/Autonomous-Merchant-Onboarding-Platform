@@ -18,11 +18,6 @@ const JOB_NAMES: Record<string, string> = {
   create_merchant: 'Create merchant ID',
 }
 
-/**
- * Jobs that failed every retry (or had no handler). Payloads arrive masked
- * from the API. Requeue (with a required note) resets the attempts and makes
- * the job due now.
- */
 export function DeadLetters() {
   const { data, error, isPending, refetch } = useDeadJobs()
   const [requeue, setRequeue] = useState<DeadJobDto | null>(null)

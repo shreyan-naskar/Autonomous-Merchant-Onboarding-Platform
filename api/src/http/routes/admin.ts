@@ -5,10 +5,7 @@ import { resetAllData } from '../../db/reset.js';
 import type { Logger } from '../../logger.js';
 import type { SimulatedMerchantService } from '../../merchant/service.js';
 
-/**
- * Demo controls for the API's simulated internal services (the mock
- * providers have their own /admin/config on port 4000). No auth: dev only.
- */
+/** Demo controls. No auth: dev only. */
 export function adminRouter({
   db,
   demoMode,
@@ -21,11 +18,7 @@ export function adminRouter({
   logger: Logger;
 }): Router {
   const router = Router();
-  /**
-   * Demo only (DEMO_MODE=true, else 404): delete every row and clear the
-   * merchant-service failure flag, so `npm run demo` can start clean against
-   * already-running services. Uploaded files are left on disk.
-   */
+  /** Exists only when DEMO_MODE is on (404 otherwise). Uploaded files stay on disk. */
   router.post('/reset-data', (_req, res) => {
     if (!demoMode) {
       res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Not found' } });

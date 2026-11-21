@@ -4,14 +4,9 @@ import { emitToast } from '../components/toast.tsx'
 import { isApiError } from './api.ts'
 
 /*
- * One place for error policy (no ad-hoc handling in pages):
- *  - Queries poll every 3s and are not retried on 4xx (a 404 is final);
- *    network / 5xx errors retry once, then the next poll tries again.
- *    Query errors never toast (polling would spam); pages render them with
- *    <PageError> and the offline banner covers "server unreachable".
- *  - Every failed mutation (approve, submit, PATCH, ...) shows an error
- *    toast; forms also show the error inline. A mutation can opt out with
- *    `meta: { toast: false }`.
+ * The one error policy: a 4xx is final (no retry); query errors never toast
+ * because polling would repeat them; every failed mutation toasts (opt out
+ * with `meta: { toast: false }`).
  */
 export function createQueryClient() {
   return new QueryClient({

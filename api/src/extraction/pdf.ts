@@ -1,21 +1,12 @@
 /*
- * PDF text extraction: reads the PDF's text layer with pdfjs (the engine
- * pdf-parse wraps) and rebuilds it row by row from each text item's position.
- *
- * Why positions: many PDFs (bank statements especially) draw a two-column
- * layout column by column, so plain text extraction emits all the labels
- * ("Account No. :") and only later all the values. Grouping items by their
- * baseline puts "Account No. : 12345678901" back on one row. Items on a row
- * separated by a wide gap are joined with a tab, so text.ts can tell where a
- * value's cell ends and the next column starts.
- *
- * A scanned PDF (images only) has no text layer and yields ''; it is then
- * treated as unreadable (no rasterize + OCR step yet).
+ * Rebuilds the text layer row by row from item positions. Bank statements draw
+ * two columns column by column, so plain extraction separates every label from
+ * its value; grouping by baseline puts them back together, and a wide gap
+ * becomes a tab so text.ts knows where a value ends.
  */
 
 import type { TextItem } from 'pdfjs-dist/types/src/display/api.js';
 
-/** At most this many pages are read: real KYC documents are 1-2 pages. */
 export const PDF_MAX_PAGES = 5;
 
 interface Item {
@@ -26,7 +17,6 @@ interface Item {
   height: number;
 }
 
-/** Rows of text items, top to bottom, each left to right. Pure (exported for tests). */
 export function itemsToRows(items: readonly Item[]): string[] {
   const sorted = items.filter((i) => i.str.trim() !== '').sort((a, b) => b.y - a.y || a.x - b.x);
   const rows: Item[][] = [];
@@ -50,7 +40,6 @@ export function itemsToRows(items: readonly Item[]): string[] {
   });
 }
 
-/** The text layer of a PDF as position-ordered rows, pages joined by newlines. Rejects for bytes that are not a PDF. */
 export async function pdfText(file: Buffer): Promise<string> {
   const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   // verbosity 0: no warnings about fonts, which text extraction does not need.

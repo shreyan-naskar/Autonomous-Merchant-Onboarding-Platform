@@ -20,12 +20,6 @@ import { AppError, ConflictError, IllegalTransitionError, NotFoundError } from '
 import { enqueueJob } from '../jobs/queue.js';
 import { currentVerification } from '../verification/latest.js';
 
-/**
- * Target state and audit event per resolution. The states each one may be
- * used from are REVIEW_RESOLUTION_FROM (shared): narrower than
- * ALLOWED_TRANSITIONS, so RETRY_MERCHANT_CREATION cannot approve an
- * application under review and APPROVE cannot stand in for a retry.
- */
 const TARGET: Record<Exclude<ReviewResolution, 'DISMISS'>, { to: ApplicationStatus; event: AuditEvent }> = {
   APPROVE: { to: 'APPROVED', event: 'OPERATOR_APPROVED' },
   REJECT: { to: 'REJECTED', event: 'OPERATOR_REJECTED' },
@@ -41,30 +35,13 @@ const notPossible = (resolution: ReviewResolution, status: ApplicationStatus, to
     resolution,
   });
 
-/**
- * Checks to re-run on RETRY_VERIFICATION: those whose current result is not
- * PASSED (failed, timed out, pending or never run). If all passed (e.g. a
- * HIGH_RISK review) every check is re-run.
- */
+/** Re-run what has not passed; if everything passed (e.g. a HIGH_RISK review), re-run all four. */
 function kindsToRerun(tx: Tx, app: Application): VerificationKind[] {
   const notPassed = REQUIRED_CHECKS.filter((k) => currentVerification(tx, app, k)?.status !== 'PASSED');
   return notPassed.length > 0 ? notPassed : [...REQUIRED_CHECKS];
 }
 
-/**
- * Resolve an open review task with an operator decision, in one transaction:
- * the transition (actor operator; detail has the task, resolution and note),
- * the task update, and any follow-up job. A guard or illegal-transition
- * error rolls everything back and the task stays OPEN.
- *
- * - APPROVE / RETRY_MERCHANT_CREATION enqueue create_merchant.
- * - RETRY_VERIFICATION supersedes the current rows of the re-run kinds (so
- *   their attempt count restarts at 1) and enqueues start_verifications.
- *
- * @throws NotFoundError (app or task), ConflictError (task already resolved),
- *   GuardError (approval blocked), AppError ILLEGAL_TRANSITION (resolution not
- *   possible in the current state). All map to 404/409.
- */
+/** One transaction: a guard or illegal-transition error rolls everything back and the task stays OPEN. */
 export function resolveReview(db: Db, config: Config, appId: string, req: ReviewRequest, now: number): Application {
   return db.transaction(
     (tx) => {
@@ -91,7 +68,6 @@ export function resolveReview(db: Db, config: Config, appId: string, req: Review
           });
         }
         if (!REVIEW_RESOLUTION_FROM.DISMISS.includes(app.status)) throw notPossible(req.resolution, app.status, app.status);
-        // No transition: an audit row (to_state null) and the task update.
         tx.insert(auditLog)
           .values({ applicationId: appId, at: now, actor: 'operator', fromState: app.status, toState: null, event: 'REVIEW_TASK_DISMISSED', detail })
           .run();

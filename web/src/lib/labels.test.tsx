@@ -12,11 +12,7 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { ReasonBadge, StatusBadge, STATUS_ICON } from './labels.tsx'
 
-/*
- * Every review reason code the API can create (api/src/labels.test.ts proves
- * the API only creates codes from allReviewReasons()) must have a real
- * plain-language label here.
- */
+/* Paired with api/src/labels.test.ts, which proves the API only creates reasons from allReviewReasons(). */
 describe('reason-label mapping covers every reason code in the API', () => {
   it.each(allReviewReasons())('%s has a label', (code) => {
     const r = describeReason(code)

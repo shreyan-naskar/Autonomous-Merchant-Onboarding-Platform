@@ -12,10 +12,7 @@ export interface WebhookDeps {
   now: () => number;
 }
 
-/**
- * Provider callbacks. Must be mounted before the app-wide JSON parser: the
- * HMAC is over the exact bytes received, so this route reads the raw body.
- */
+/** The HMAC is over the exact bytes received, so this route reads the raw body and must be mounted before express.json(). */
 export function webhooksRouter(deps: WebhookDeps): Router {
   const router = Router();
 

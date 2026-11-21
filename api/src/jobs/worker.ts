@@ -11,16 +11,12 @@ export interface JobContext {
   db: Db;
   config: Config;
   logger: Logger;
-  /** The worker tick's clock value (epoch ms). Handlers must use this, not Date.now(). */
+  /** Handlers use this, never Date.now(), so tests can drive time. */
   now: number;
   job: JobRow;
 }
 
-/**
- * A job handler. Throwing (or rejecting) counts as a failed attempt: the job
- * is retried with backoff, then dead-lettered. Handlers should be idempotent
- * (a retry may follow a partial run) and do their DB writes in a transaction.
- */
+/** Throwing counts as a failed attempt. Handlers must be idempotent: a retry can follow a partial run. */
 export type JobHandler = (payload: Record<string, unknown>, ctx: JobContext) => void | Promise<void>;
 export type JobHandlers = Partial<Record<JobType, JobHandler>>;
 
@@ -29,7 +25,6 @@ export interface WorkerDeps {
   config: Config;
   logger: Logger;
   handlers: JobHandlers;
-  /** Max jobs claimed per tick. */
   batchSize?: number;
 }
 
@@ -40,16 +35,11 @@ export interface TickResult {
   dead: number;
 }
 
-/** Delay before the next attempt after `attempts` failed tries: base * 2^(attempts-1). */
 export function backoffDelayMs(baseMs: number, attempts: number): number {
   return baseMs * 2 ** Math.max(0, attempts - 1);
 }
 
-/**
- * Atomically claim due jobs: one UPDATE ... WHERE status='queued' ... RETURNING
- * moves them to `running` and counts the attempt. A job is claimed by at most
- * one caller because the status check and the write are a single statement.
- */
+/** One UPDATE ... RETURNING: the status check and the claim are a single statement, so a job is claimed at most once. */
 export function claimDueJobs(db: Db, now: number, limit: number): JobRow[] {
   const due = db
     .select({ id: jobs.id })
@@ -71,16 +61,10 @@ const applicationIdOf = (job: JobRow): string | undefined => {
   return typeof id === 'string' ? id : undefined;
 };
 
-/** Error text safe to store and show: PAN/account-shaped substrings masked, bounded length. */
+/** Errors are stored and shown, so PAN / account-shaped text is masked first. */
 const errorText = (err: unknown) => redactText(err instanceof Error ? err.message : String(err)).slice(0, 500);
 
-/**
- * Record a failed attempt. Retry with exponential backoff while attempts
- * remain; otherwise mark the job `dead`, open a JOB_DEAD review task and
- * write a JOB_DEAD audit row. Each retryable failure writes JOB_FAILED.
- * Audit rows and review tasks need an application, so a job without a
- * (known) `application_id` is only logged.
- */
+/** Retry with exponential backoff, then dead-letter with a JOB_DEAD review task. Jobs without an application are only logged. */
 function recordFailure(deps: WorkerDeps, job: JobRow, err: unknown, now: number, permanent: boolean): 'retried' | 'dead' {
   const { db, config, logger } = deps;
   const error = errorText(err);
@@ -138,11 +122,7 @@ function recordFailure(deps: WorkerDeps, job: JobRow, err: unknown, now: number,
   return dead ? 'dead' : 'retried';
 }
 
-/**
- * One worker tick at clock value `now`: claim due jobs, run each one's handler
- * in order, and record the outcome. Jobs enqueued by handlers during this
- * tick run on a later tick. Never throws for a handler error.
- */
+/** Jobs enqueued during a tick run on a later tick. Never throws for a handler error. */
 export async function runDueJobsOnce(deps: WorkerDeps, now: number): Promise<TickResult> {
   const claimed = claimDueJobs(deps.db, now, deps.batchSize ?? 10);
   const result: TickResult = { claimed: claimed.length, done: 0, retried: 0, dead: 0 };
@@ -166,14 +146,10 @@ export async function runDueJobsOnce(deps: WorkerDeps, now: number): Promise<Tic
 }
 
 export interface Worker {
-  /** Stop polling and wait for an in-flight tick to finish. */
   stop(): Promise<void>;
 }
 
-/**
- * Poll runDueJobsOnce every `config.timings.workerPollMs`. Ticks never
- * overlap: a tick that is still running makes the next interval a no-op.
- */
+/** Ticks never overlap: a tick still running makes the next interval a no-op. */
 export function startWorker(deps: WorkerDeps, { now = Date.now, intervalMs }: { now?: () => number; intervalMs?: number } = {}): Worker {
   let inFlight: Promise<unknown> | null = null;
   const tick = () => {

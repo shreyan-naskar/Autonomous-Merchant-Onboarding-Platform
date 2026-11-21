@@ -17,15 +17,7 @@ const applicationIdOf = (job: JobRow) => {
   return typeof id === 'string' ? id : undefined;
 };
 
-/**
- * Put a dead job back in the queue: status queued, attempts reset to 0,
- * due now. last_error is kept until the next attempt overwrites it. If the
- * job belongs to an application, writes audit JOB_REQUEUED (actor operator,
- * with the operator's note) and resolves the open JOB_DEAD task the worker
- * opened for this job (resolution REQUEUED, same note). One transaction.
- *
- * @throws NotFoundError (no such job), ConflictError (job is not dead).
- */
+/** Resets the retry budget, audits the operator's note and resolves the JOB_DEAD task the worker opened for this job. */
 export function requeueJob(db: Db, jobId: number, { now, note: rawNote }: { now: number; note: string }): JobRow {
   const note = redactText(rawNote);
   return db.transaction(

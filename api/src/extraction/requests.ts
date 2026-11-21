@@ -1,15 +1,8 @@
 import { DOCUMENT_LABELS, FORM_FIELD_LABELS, type DocumentType, type MerchantFormField, type MerchantRequest } from '@app/shared';
 import { DOCUMENT_FIELDS } from './extract.js';
 
-/*
- * Turns the missing-info list of an extraction decision into what the
- * merchant is asked to supply, in plain language, plus which form fields and
- * documents the web panel should offer. Pure. Only missing information goes
- * to the merchant; blurry, conflicting and low-confidence documents are
- * exceptions for a human reviewer (see decide.ts).
- */
+/* Plain-language requests for missing information. Messages never contain PAN, GSTIN or account values. */
 
-/** Extracted field name -> how to say it on a document. */
 const FIELD_ON_DOC: Record<string, string> = {
   pan: 'PAN',
   name: 'name',
@@ -20,7 +13,6 @@ const FIELD_ON_DOC: Record<string, string> = {
   account_holder: 'account holder name',
 };
 
-/** Document name mid-sentence ("your bank proof", "your PAN card"). */
 const docLower = (t: DocumentType) => DOCUMENT_LABELS[t].replace(/^Bank/, 'bank');
 
 export interface MerchantRequests {

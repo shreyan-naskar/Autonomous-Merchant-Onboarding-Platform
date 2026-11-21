@@ -1,12 +1,7 @@
 import { z } from 'zod';
 
-/**
- * Request schemas for application intake. Error messages are fixed strings:
- * they never include the submitted value, so a 400 cannot echo a PAN or
- * account number back to the caller (or into logs).
- */
+/** Error messages are fixed strings, so a 400 never echoes a PAN or account number back (or into logs). */
 
-// Format rules, shared with the extraction validators.
 export const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 /** 2-digit state code, PAN, entity number, 'Z', checksum. */
 export const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -17,7 +12,6 @@ export const DOCUMENT_TYPES = ['PAN_CARD', 'GST_CERT', 'BANK_PROOF'] as const;
 export const DocumentTypeSchema = z.enum(DOCUMENT_TYPES);
 export type DocumentType = z.infer<typeof DocumentTypeSchema>;
 
-/** Accepted upload MIME types and the extension used when saving them. */
 export const UPLOAD_MIME_TYPES = {
   'application/pdf': '.pdf',
   'image/png': '.png',
@@ -25,8 +19,6 @@ export const UPLOAD_MIME_TYPES = {
 } as const;
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
-// ---------------------------------------------------------------------------
-// Form fields (what the merchant typed). Strictly validated at intake.
 
 const merchantName = z.string().trim().min(2, 'Must be at least 2 characters').max(200, 'Must be at most 200 characters');
 const pan = z.string().trim().toUpperCase().regex(PAN_RE, 'PAN must be 5 letters, 4 digits, 1 letter');
@@ -43,11 +35,8 @@ export const ApplicationFieldsSchema = z.strictObject({
 });
 export type ApplicationFields = z.infer<typeof ApplicationFieldsSchema>;
 
-// ---------------------------------------------------------------------------
-// Structured documents. Payload values are what the document "says"; they are
-// deliberately loose (any short string) because checking them against formats
-// and the form is extraction's job, which turns problems into review
-// outcomes instead of 400s.
+// Document values are deliberately loose: checking them is extraction's job,
+// which turns problems into review outcomes instead of 400s.
 
 const docValue = z.string().trim().min(1, 'Must not be empty').max(200, 'Must be at most 200 characters').optional();
 
@@ -73,17 +62,12 @@ export const StructuredDocumentListSchema = z
   .max(DOCUMENT_TYPES.length, `At most ${DOCUMENT_TYPES.length} documents`)
   .refine(uniqueTypes, 'Each document type may appear at most once');
 
-/** POST /applications with `content-type: application/json`. */
 export const CreateApplicationJsonSchema = ApplicationFieldsSchema.extend({
   documents: StructuredDocumentListSchema.default([]),
 });
 export type CreateApplicationJson = z.infer<typeof CreateApplicationJsonSchema>;
 
-/**
- * POST /applications as multipart/form-data: the same text fields, files in
- * parts named after their document type (PAN_CARD, GST_CERT, BANK_PROOF), and
- * optionally a `documents` part holding a JSON array of structured documents.
- */
+/** Multipart: files in parts named after their document type, plus an optional `documents` JSON part. */
 const jsonText = z.string().transform((s, ctx) => {
   try {
     return JSON.parse(s) as unknown;
@@ -97,11 +81,7 @@ export const CreateApplicationMultipartFieldsSchema = ApplicationFieldsSchema.ex
   documents: jsonText.pipe(StructuredDocumentListSchema).optional(),
 });
 
-/**
- * PATCH /applications/:id. Any subset of the form fields and/or structured
- * documents (documents are only accepted while the application is in
- * NEEDS_INFO; each replaces the existing document of the same type).
- */
+
 export const UpdateApplicationSchema = ApplicationFieldsSchema.partial()
   .extend({ documents: StructuredDocumentListSchema.optional() })
   .refine(
@@ -110,12 +90,7 @@ export const UpdateApplicationSchema = ApplicationFieldsSchema.partial()
   );
 export type UpdateApplication = z.infer<typeof UpdateApplicationSchema>;
 
-/**
- * Multipart PATCH /applications/:id (merchant correcting a NEEDS_INFO
- * application in the browser): form fields as text parts, optional
- * `documents` JSON part, and files named after their document type. Whether
- * anything was sent at all is checked by the route (files count too).
- */
+/** Whether anything was sent at all is checked by the route, because files count too. */
 export const UpdateApplicationMultipartFieldsSchema = ApplicationFieldsSchema.partial().extend({
   documents: jsonText.pipe(StructuredDocumentListSchema).optional(),
 });

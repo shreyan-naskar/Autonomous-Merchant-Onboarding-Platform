@@ -2,14 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { jobs } from './db/schema.js';
 import { events, openTask, sample, startE2E, type E2E } from './e2e.js';
 
-/*
- * Provider outage (Demo controls -> "Provider outage"): the brief's
- * "provider outages" and the stretch "retry policies, dead-letter handling".
- * Verify requests get 503; start_verifications retries with backoff, then is
- * dead-lettered with a JOB_DEAD review task; once the outage ends, the
- * operator requeues it from the Dead letters page and the application
- * completes.
- */
+/* Providers answer 503: the job retries with backoff, dead-letters, and completes once requeued after the outage. */
 
 let e: E2E;
 beforeEach(async () => {

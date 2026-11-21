@@ -30,14 +30,9 @@ export function createRealScheduler(): Scheduler {
 }
 
 export interface ManualScheduler extends Scheduler {
-  /** Current virtual time (ms since creation). */
   readonly now: number;
-  /** Number of tasks not yet run. */
   pending(): number;
-  /**
-   * Advance virtual time by `ms`, running due tasks in (time, insertion) order
-   * and awaiting each before the next. Returns the number of tasks run.
-   */
+  /** Runs due tasks in order, awaiting each. Returns how many ran. */
   advance(ms: number): Promise<number>;
 }
 

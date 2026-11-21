@@ -3,24 +3,16 @@ import { asc, count, isNotNull } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { applications, auditLog } from '../db/schema.js';
 
-/** A state-changing audit row (to_state not null). */
 export interface TransitionRow {
   applicationId: string;
   at: number;
   toState: ApplicationStatus;
 }
 
-/** States that count as an exception: the application needed a human or the merchant. */
+/** An exception is any application that needed a person or the merchant. */
 export const EXCEPTION_STATES: readonly ApplicationStatus[] = ['IN_REVIEW', 'NEEDS_INFO'];
 
-/**
- * Pure metrics over the audit trail. `rows` must be in audit order (by id)
- * per application. A stay in state S runs from the row entering S to the
- * application's next transition; stays still in progress are not averaged
- * (they show up in `current`). Every application has a creation row
- * (to_state SUBMITTED), so the number of distinct applications in `rows` is
- * the total.
- */
+/** Stays still in progress are not averaged (they count in `current`). `rows` must be in audit order per application. */
 export function computeMetrics(rows: readonly TransitionRow[], current: Partial<Record<ApplicationStatus, number>>): MetricsDto {
   const byApp = new Map<string, TransitionRow[]>();
   for (const r of rows) {
@@ -53,7 +45,6 @@ export function computeMetrics(rows: readonly TransitionRow[], current: Partial<
   };
 }
 
-/** Load the transitions and current status counts, then computeMetrics(). */
 export function getMetrics(db: Db): MetricsDto {
   const rows = db
     .select({ applicationId: auditLog.applicationId, at: auditLog.at, toState: auditLog.toState })

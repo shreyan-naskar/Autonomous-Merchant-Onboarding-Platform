@@ -7,11 +7,6 @@ import {
 } from '@app/shared';
 import type { Application } from '../db/schema.js';
 
-/**
- * Starts an asynchronous provider check. Resolves with the provider's
- * request_id once the request is accepted; the outcome arrives later as a
- * signed callback. Rejects if the provider cannot be reached or refuses.
- */
 export interface ProviderClient {
   request<K extends VerificationKind>(kind: K, body: ProviderRequest<K>): Promise<ProviderAccepted>;
 }
@@ -27,7 +22,7 @@ export class ProviderRequestError extends Error {
   }
 }
 
-/** The request body for one check, built from the application's current form values. */
+/** Each provider gets only the fields its check needs. */
 export function buildProviderRequest(kind: VerificationKind, app: Application): ProviderRequest {
   const need = (value: string | null, field: string) => {
     if (!value) throw new ProviderRequestError(kind, `application has no ${field}`);
@@ -53,12 +48,10 @@ export function buildProviderRequest(kind: VerificationKind, app: Application): 
 
 export interface HttpProviderClientOptions {
   baseUrl: string;
-  /** Per-request timeout. */
   timeoutMs?: number;
   fetch?: typeof fetch;
 }
 
-/** ProviderClient over HTTP (the mock providers, or a real gateway with the same contract). */
 export function createHttpProviderClient(opts: HttpProviderClientOptions): ProviderClient {
   const doFetch = opts.fetch ?? fetch;
   const base = opts.baseUrl.replace(/\/+$/, '');
@@ -73,7 +66,7 @@ export function createHttpProviderClient(opts: HttpProviderClientOptions): Provi
           signal: AbortSignal.timeout(opts.timeoutMs ?? 5_000),
         });
       } catch (err) {
-        // Network error messages never contain the body; keep only the cause.
+        // Keep only the cause: the request body contains PANs.
         throw new ProviderRequestError(kind, (err as Error).name === 'TimeoutError' ? 'timed out' : (err as Error).message);
       }
       const text = await res.text().catch(() => '');

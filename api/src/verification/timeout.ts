@@ -6,24 +6,12 @@ import { backoffDelayMs } from '../jobs/worker.js';
 import type { VerificationDeps } from './start.js';
 
 export type TimeoutOutcome =
-  /** The check already has a result, was superseded, or is for an old bank_version. */
   | 'not_pending'
-  /** Marked TIMED_OUT; a new request (attempt + 1) is scheduled after backoff. */
   | 'retry_scheduled'
-  /** Marked TIMED_OUT after the last retry; application moved to IN_REVIEW (<KIND>_TIMEOUT). */
   | 'escalated'
-  /** Marked TIMED_OUT, but the application is no longer VERIFYING, so nothing else happens. */
   | 'timed_out';
 
-/**
- * The `verification_timeout` job, scheduled for every provider request. If
- * the request is still PENDING when it fires: mark it TIMED_OUT and either
- * re-request it (start_verifications for that kind, after exponential
- * backoff: attempt 2 after base, attempt 3 after 2*base) or, once
- * `verificationMaxRetries` retries have also timed out, move the application
- * to IN_REVIEW with a `<KIND>_TIMEOUT` review task. One transaction; a late
- * callback can still complete the TIMED_OUT row afterwards.
- */
+/** Retries with backoff, then escalates to review. A late callback can still complete the TIMED_OUT row afterwards. */
 export function runVerificationTimeout(deps: VerificationDeps, verificationId: number): TimeoutOutcome {
   const { db, config, logger, now } = deps;
   const outcome = db.transaction(

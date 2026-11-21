@@ -16,12 +16,8 @@ export interface AppDeps {
   config: Config;
   logger: Logger;
   db: Db;
-  /** Injectable clock (epoch ms) for deterministic tests. */
   now?: () => number;
-  /**
-   * Simulated merchant ID service whose failure flag POST /admin/merchant-service
-   * toggles. Pass the same instance to createJobHandlers so the worker sees it.
-   */
+  /** Pass the same instance to createJobHandlers so the worker sees the demo failure flag. */
   merchantService?: SimulatedMerchantService;
   /** Lets tests mount extra routes before the 404 handler. */
   mount?: (app: Express) => void;
@@ -33,7 +29,7 @@ export function createApp(deps: AppDeps): Express {
   const merchantService = deps.merchantService ?? createSimulatedMerchantService(db);
   const app = express();
 
-  // Request log: method, path, status, duration. Never the body.
+  // Never the body.
   app.use((req, res, next) => {
     const start = process.hrtime.bigint();
     res.on('finish', () => {
@@ -43,7 +39,7 @@ export function createApp(deps: AppDeps): Express {
     next();
   });
 
-  // Before the JSON parser: the webhook signature is over the raw body.
+  // Before the JSON parser: the HMAC is computed over the raw bytes, so they must reach the route untouched.
   app.use('/webhooks', webhooksRouter({ db, logger, hmacSecret: config.hmacSecret, now }));
 
   app.use(express.json({ limit: '1mb' }));

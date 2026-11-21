@@ -13,15 +13,10 @@ export interface CallbackDeps {
 }
 
 /**
- * What a callback did:
- * - applied: result recorded on a PENDING check, application re-evaluated
- * - late: result recorded on a TIMED_OUT check (audited LATE_CALLBACK), re-evaluated
- * - stale: recorded for the record, but the check is superseded or for an old
- *   bank_version, so it does not count (audited STALE_CALLBACK)
- * - already_completed: the check already has a result; ignored
- * - mismatch: request_id belongs to another application or kind; ignored
- * - unknown_request: no check has this request_id (yet); kept unprocessed and
- *   applied if start_verifications stores that request_id later
+ * What a callback did. A `late` result (after the request timed out) still
+ * counts: dropping it would throw away a real answer. A `stale` one (superseded
+ * check, or an old bank_version after a bank change) is recorded but never
+ * counts. `unknown_request` waits until start_verifications stores the id.
  */
 export type CallbackOutcome = 'applied' | 'late' | 'stale' | 'already_completed' | 'mismatch' | 'unknown_request';
 
@@ -29,11 +24,7 @@ export type ReceiveResult =
   | { duplicate: true; eventRowId: number }
   | { duplicate: false; eventRowId: number; outcome: CallbackOutcome };
 
-/**
- * Apply one callback to its verification row (inside the caller's
- * transaction). Never throws for an unexpected callback: anything that
- * cannot be applied is reported as an outcome and left in callback_events.
- */
+/** Never throws for an unexpected callback: it becomes an outcome and stays in callback_events. */
 export function applyCallback(tx: Tx, cb: ProviderCallback, now: number): CallbackOutcome {
   const row = tx.select().from(verifications).where(eq(verifications.requestId, cb.request_id)).get();
   if (!row) return 'unknown_request';
@@ -105,17 +96,13 @@ export function applyCallback(tx: Tx, cb: ProviderCallback, now: number): Callba
   return stale ? 'stale' : late ? 'late' : 'applied';
 }
 
-/** Outcomes after which the event needs no further work. */
 const isFinal = (o: CallbackOutcome) => o !== 'unknown_request';
 
 /**
- * Store a verified provider callback in callback_events, idempotently.
- *
- * In one IMMEDIATE transaction: if a non-duplicate row with this event_id
- * already exists, insert a second row flagged is_duplicate (for the audit
- * trail) and do nothing else. Otherwise insert the event and apply it in
- * the same transaction, so "stored" and "applied" cannot disagree. If
- * applying throws, nothing is stored and the provider may redeliver.
+ * Idempotent by event_id: the partial unique index covers only non-duplicate
+ * rows, so a redelivery is stored again with is_duplicate set (kept for the
+ * audit trail) and has no other effect. Storing and applying share one
+ * transaction: if applying fails nothing is stored and the provider can retry.
  */
 export function receiveCallback(deps: CallbackDeps, cb: ProviderCallback): ReceiveResult {
   const { db, logger, now } = deps;
@@ -173,11 +160,7 @@ export function receiveCallback(deps: CallbackDeps, cb: ProviderCallback): Recei
   return result;
 }
 
-/**
- * Apply callbacks that arrived before their request_id was stored (a fast
- * provider can call back before start_verifications records the id). Called
- * in the same transaction that stores the request_id.
- */
+/** A fast provider can answer before start_verifications stores the request_id; apply those callbacks once it does. */
 export function applyEarlyCallbacks(tx: Tx, requestId: string, now: number): CallbackOutcome[] {
   const waiting = tx
     .select()

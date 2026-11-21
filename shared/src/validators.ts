@@ -1,10 +1,6 @@
 import { BANK_ACCOUNT_RE, GSTIN_RE, IFSC_RE, PAN_RE } from './intake.js';
 
-/*
- * Pure format and consistency checks used by extraction (api) and available to
- * the web app. Inputs are taken as-is: callers normalize case/whitespace first
- * (intake uppercases form values; extraction uppercases document values).
- */
+/* Inputs are taken as-is: callers normalize case and whitespace first. */
 
 type Maybe = string | null | undefined;
 
@@ -21,17 +17,10 @@ export function gstinMatchesPan(gstin: Maybe, pan: Maybe): boolean {
   return isValidGstin(gstin) && isValidPan(pan) && panFromGstin(gstin as string) === pan;
 }
 
-// ---------------------------------------------------------------------------
-// Name matching
 
-/** Legal-form and filler words that do not identify a business. */
 const NAME_SUFFIXES = new Set(['pvt', 'private', 'ltd', 'limited', 'llp', 'p', 'co', 'inc', 'corp']);
 
-/**
- * Lowercase, drop "M/s", apostrophes and other punctuation, collapse
- * whitespace, and remove legal-form words (pvt, ltd, private, limited, ...).
- * If only suffix words remain, they are kept so the name is not empty.
- */
+/** Legal-form words (pvt, ltd, ...) are dropped, unless nothing else remains. */
 export function normalizeName(name: string): string {
   const tokens = name
     .toLowerCase()
@@ -45,7 +34,6 @@ export function normalizeName(name: string): string {
   return (kept.length > 0 ? kept : tokens).join(' ');
 }
 
-/** Classic edit distance (insert/delete/substitute, cost 1), O(n*m) time, O(m) space. */
 export function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   if (a.length === 0) return b.length;
@@ -62,11 +50,7 @@ export function levenshtein(a: string, b: string): number {
   return prev[b.length]!;
 }
 
-/**
- * Similarity in [0, 1] of two business names after normalizeName(): the
- * larger of token Jaccard overlap (handles reordered words) and Levenshtein
- * ratio (handles typos). 0 if either name is empty or absent.
- */
+/** The larger of token overlap (reordered words) and edit-distance ratio (typos), in [0, 1]. */
 export function nameSimilarity(a: Maybe, b: Maybe): number {
   if (!a || !b) return 0;
   const na = normalizeName(a);

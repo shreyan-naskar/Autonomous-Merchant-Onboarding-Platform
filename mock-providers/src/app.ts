@@ -27,22 +27,17 @@ export const DEFAULT_CHAOS: ChaosConfig = {
 };
 
 export interface MockConfig {
-  /** Where callbacks are POSTed (the API's /webhooks/provider). */
   webhookUrl: string;
-  /** Shared secret for the X-Signature HMAC. */
   hmacSecret: string;
-  /** Initial chaos settings (merged over DEFAULT_CHAOS). */
   chaos?: Partial<ChaosConfig>;
   scheduler?: Scheduler;
   fetch?: typeof fetch;
-  /** Called for every callback attempt (tests, dev console). Never given request bodies. */
+  /** Never given request bodies (they contain PANs). */
   onDelivery?: (info: { event_id: string; kind: VerificationKind; status?: number; error?: string }) => void;
 }
 
 export type MockApp = Express & {
-  /** Current chaos settings (mutable via /admin/config). */
   readonly chaos: ChaosConfig;
-  /** Resolves when all scheduled callbacks have been delivered (real scheduler). */
   settled(): Promise<void>;
 };
 
@@ -58,7 +53,6 @@ export function riskScore(merchantName: string): number {
   return h % 41;
 }
 
-/** The provider's verdict for a request, from magic values and chaos failKinds. */
 export function decide(kind: VerificationKind, req: ProviderRequest, chaos: ChaosConfig): ProviderResult {
   if (chaos.failKinds.includes(kind)) return { status: 'FAILED', reason: 'FORCED_FAILURE' };
   switch (kind) {
@@ -77,16 +71,11 @@ export function decide(kind: VerificationKind, req: ProviderRequest, chaos: Chao
   }
 }
 
-/** Requests for which the mock never calls back. */
 function isSilent(kind: VerificationKind, req: ProviderRequest): boolean {
   return kind === 'BANK' && (req as ProviderRequest<'BANK'>).bank_account.endsWith(MAGIC.silentBankSuffix);
 }
 
-/**
- * Mock PAN/GST/bank/risk providers. Each POST returns `202 {request_id}` and
- * later POSTs a signed callback to `webhookUrl`, shaped by the chaos settings.
- * Integration tests start this in-process on a random port.
- */
+/** Each verify request answers 202 and later POSTs a signed callback, shaped by the chaos settings. */
 export function createMockApp(config: MockConfig): MockApp {
   const scheduler = config.scheduler ?? createRealScheduler();
   const doFetch = config.fetch ?? fetch;
@@ -101,7 +90,6 @@ export function createMockApp(config: MockConfig): MockApp {
     res.json({ status: 'ok', service: 'mock-providers' });
   });
 
-  /** Callbacks already sent, by event_id (bounded), for /admin/redeliver. */
   const sent = new Map<string, ProviderCallback>();
   const SENT_LIMIT = 1_000;
 
@@ -176,18 +164,13 @@ export function createMockApp(config: MockConfig): MockApp {
     res.json(chaos);
   });
 
-  /** Restore DEFAULT_CHAOS merged with the startup chaos settings, and forget sent callbacks. */
   app.post('/admin/reset', (_req, res) => {
     Object.assign(chaos, DEFAULT_CHAOS, config.chaos);
     sent.clear();
     res.json(chaos);
   });
 
-  /**
-   * Send an already-delivered callback again, byte-identical and signed the
-   * same way, as a provider retry would: `{event_id}` (default: the most
-   * recent one). Answers with the API's reply to the redelivery.
-   */
+  /** Byte-identical, identically signed redelivery: what a provider retry looks like to the API. */
   app.post('/admin/redeliver', async (req, res) => {
     const eventId = typeof req.body?.event_id === 'string' ? req.body.event_id : [...sent.keys()].at(-1);
     const callback = eventId ? sent.get(eventId) : undefined;

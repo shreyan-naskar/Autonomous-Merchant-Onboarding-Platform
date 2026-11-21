@@ -1,25 +1,11 @@
 import type { DocumentType } from '@app/shared';
 
 /*
- * Free text (OCR output, PDF text) -> a structured document payload with the
- * same keys as JSON documents (see DOCUMENT_FIELDS in extract.ts), so text
- * documents go through exactly the same field rules. Pure.
- *
- * Values are found by pattern (PAN, GSTIN, IFSC) or by label ("Name",
- * "Legal Name", "Account Number", ...). A value that cannot be found is
- * left out; extractFields then flags that field as unreadable.
- *
- * Real documents this has to cope with (seen on a real PAN card and a bank
- * statement PDF):
- *  - bilingual labels: "नाम / Name" OCRs as junk before "Name", so a label
- *    may follow junk and a separator, not only start the line;
- *  - several labelled names on one document ("Father's Name", "Branch Name"):
- *    those are excluded;
- *  - names followed by OCR noise ("SHREYAN NASKAR Wid aA"), or prefixed with
- *    a title ("Mr."): only the name words are kept;
- *  - two-column layouts: PDF rows arrive as "label : value<TAB>other column",
- *    so a value ends at a tab (see pdf.ts);
- *  - an IFSC printed with the letter O as its 5th character (always 0).
+ * OCR / PDF text -> the same payload keys as JSON documents, so both go
+ * through the same field rules. The label handling is shaped by real
+ * documents: bilingual labels ("नाम / Name" OCRs as junk before "Name"),
+ * other people's names ("Father's Name"), OCR noise after a name, and
+ * two-column PDF rows where a tab ends the value (see pdf.ts).
  */
 
 const PAN_IN_TEXT = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/;
@@ -27,25 +13,18 @@ const GSTIN_IN_TEXT = /\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/;
 // The 5th character of an IFSC is always zero; documents sometimes print the letter O.
 const IFSC_IN_TEXT = /\b[A-Z]{4}[0O][A-Z0-9]{6}\b/;
 
-/** Words before "Name" that make it someone else's name (not the holder's). */
 const OTHER_NAME = /(?:father'?s?|mother'?s?|spouse'?s?|guardian'?s?|branch|bank|nominee'?s?|trade|business)\s*$/i;
 
 function lines(text: string): string[] {
   return text
     .split(/\r?\n/)
-    // Keep tabs: they separate columns in PDF rows.
     .map((l) => l.replace(/[  ]+/g, ' ').replace(/ *\t */g, '\t').trim())
     .filter((l) => l !== '');
 }
 
-/** The first cell of a value: drop leading separators, stop at a column break. */
 const firstCell = (s: string) => s.replace(/^[\s:.\-|]+/, '').split('\t')[0]!.trim();
 
-/**
- * Candidate values for a label, in order: the rest of the label's line
- * (first cell), then the next line. The label must start the line or follow
- * a separator (space, '/', '|', tab), and must not be preceded by `notAfter`.
- */
+/** Candidates for a label's value: the rest of its line, then the next line. */
 function labelled(ls: readonly string[], label: RegExp, notAfter?: RegExp): string[] {
   const re = new RegExp(`(^|[\\s/|])(?:${label.source})(?![A-Za-z])`, 'gi');
   const out: string[] = [];
@@ -66,12 +45,7 @@ const TITLE = /^(?:mr|mrs|ms|miss|shri|sri|smt|kumari|dr|m\/s)\.?$/i;
 const NAME_TOKEN = /^[A-Za-z][A-Za-z.'-]*$/;
 const isCaps = (t: string) => t === t.toUpperCase();
 
-/**
- * Keep only the name words: drop a leading title, then take the leading run
- * of capitalized words. A name printed in capitals (PAN cards) ends at the
- * first word that is not in capitals, which drops trailing OCR noise.
- * Null when the text does not start like a name.
- */
+/** A name printed in capitals (PAN cards) ends at the first word that isn't, which drops trailing OCR noise. */
 export function cleanName(raw: string): string | null {
   const tokens = raw.split(/\s+/).filter(Boolean);
   while (tokens.length > 0 && TITLE.test(tokens[0]!)) tokens.shift();
@@ -97,7 +71,6 @@ const firstName = (candidates: string[]) => candidates.map(cleanName).find((n): 
 
 const firstMatch = (text: string, re: RegExp) => text.toUpperCase().match(re)?.[0];
 
-/** Account numbers: 9-18 digits, possibly written in groups ("5010 0234 5678 91"). */
 function accountNumber(ls: readonly string[]): string | undefined {
   for (const v of labelled(ls, /(?:bank\s+)?(?:account|a\/c)\s*(?:number|no\.?)/)) {
     const digits = v.match(/[0-9][0-9 ]{7,}[0-9]/)?.[0]?.replace(/ /g, '');

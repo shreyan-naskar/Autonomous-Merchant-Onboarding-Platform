@@ -21,10 +21,6 @@ import {
 } from 'lucide-react'
 import { Badge, Tooltip, type Tone } from '../components/ui.tsx'
 
-/*
- * Web side of the plain-language mapping (shared/src/labels.ts holds the
- * words): severity -> tone and icon, so status is never color-only.
- */
 
 export const toneOf = (s: Severity): Tone => s
 
@@ -49,7 +45,6 @@ export const STATUS_ICON: Record<ApplicationStatus, LucideIcon> = {
   REJECTED: XCircle,
 }
 
-/** Status as icon + plain words; the raw code and a one-line explanation in the tooltip. */
 export function StatusBadge({ status, className }: { status: ApplicationStatus; className?: string }) {
   const s = STATUS_LABELS[status]
   return (
@@ -63,7 +58,6 @@ export function StatusBadge({ status, className }: { status: ApplicationStatus; 
   )
 }
 
-/** A review task reason in plain words; raw code in the tooltip. */
 export function ReasonBadge({ reason }: { reason: string }) {
   const r = describeReason(reason)
   return (
@@ -77,5 +71,4 @@ export function ReasonBadge({ reason }: { reason: string }) {
   )
 }
 
-/** Applications that need someone to act. */
 export const NEEDS_ATTENTION: readonly ApplicationStatus[] = ['NEEDS_INFO', 'IN_REVIEW', 'MERCHANT_CREATION_FAILED']

@@ -3,10 +3,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { Button } from '../components/ui.tsx'
 import { usePageTitle } from '../lib/pageTitle.tsx'
 
-/**
- * 404 inside the app shell (the navigation stays usable). Also used when a
- * resource does not exist, e.g. "Application <id> doesn't exist".
- */
+/** Rendered inside the shell, so navigation stays usable. Also used for a resource that doesn't exist. */
 export function NotFound({ title = 'Page not found', message }: { title?: string; message?: string }) {
   const location = useLocation()
   const navigate = useNavigate()

@@ -6,33 +6,21 @@ import type { OcrEngine } from './ocr.js';
 import { pdfText } from './pdf.js';
 import { parseDocumentText } from './text.js';
 
-/*
- * Reads uploaded files (the slow, async part of extraction: blur check + OCR
- * for images, text layer for PDFs) into structured payloads that
- * extractFields() treats like JSON documents. Runs in the extract job only,
- * before its DB transaction.
- */
+/* The slow part of extraction (blur check, OCR, PDF text). Runs in the extract job, never in a request, before its DB transaction. */
 
 export interface DocumentReading {
-  /** ocr: image through blur check + tesseract; pdf: the PDF's text layer. */
   source: 'ocr' | 'pdf';
-  /** Parsed values, or null when nothing could be read (blurry, corrupt, no text layer, unreadable file). */
   payload: Record<string, string> | null;
-  /** Confidence of the read (OCR page mean, or PDF_TEXT_CONFIDENCE), 0-1. Used for fields without their own. */
+  /** Fallback for fields without their own word-level confidence. */
   confidence: number;
-  /** Per payload key: OCR confidence of the words that make up that value (images only). */
+  /** Per field: the OCR confidence of its own words. The page mean is dragged down by everything else on a real card. */
   fieldConfidence?: Record<string, number>;
   blurScore?: number;
   blurry?: boolean;
-  /** Why the file could not be read (no values, never file contents). */
   error?: 'file_unreadable' | 'not_an_image' | 'not_a_pdf' | 'no_text_layer';
 }
 
-/**
- * A PDF text layer is exact text, not a recognition, but the label-based
- * parsing is still a heuristic: just below structured JSON (1.0), well above
- * the 0.8 review threshold.
- */
+/** Exact text, but the label parsing is a heuristic: just below JSON (1.0), above the 0.8 threshold. */
 export const PDF_TEXT_CONFIDENCE = 0.95;
 
 export interface ReadableDocument {
@@ -58,7 +46,7 @@ async function readImage(type: DocumentType, file: Buffer, deps: ReadDeps): Prom
   try {
     score = await blurScore(file);
   } catch {
-    // sharp could not decode it: corrupt or mislabelled. Not worth a retry.
+    // Corrupt or mislabelled: deterministic, so not worth a retry.
     return { source: 'ocr', payload: null, confidence: 0, error: 'not_an_image' };
   }
   if (isBlurry(score, deps.blurThreshold)) {
@@ -73,15 +61,9 @@ async function readImage(type: DocumentType, file: Buffer, deps: ReadDeps): Prom
   return { source: 'ocr', payload, confidence, ...(fieldConfidence ? { fieldConfidence } : {}), blurScore: score, blurry: false };
 }
 
-/** Comparable form of a word: upper case, letters and digits only, O read as 0. */
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/O/g, '0');
 
-/**
- * Confidence of one extracted value: the lowest confidence among its words,
- * each matched to the best-scoring OCR word with the same text. Falls back
- * to the page confidence when a word cannot be found (e.g. the value was
- * normalized after OCR).
- */
+/** The weakest of the value's words; the page confidence when a word can't be matched (e.g. normalized after OCR). */
 export function valueConfidence(value: string, words: readonly { text: string; confidence: number }[], fallback: number): number {
   let min = 1;
   for (const token of value.split(/\s+/).map(norm).filter(Boolean)) {
@@ -97,21 +79,16 @@ async function readPdf(type: DocumentType, file: Buffer): Promise<DocumentReadin
   try {
     text = await pdfText(file);
   } catch {
-    // Corrupt or not a PDF: deterministic, so not worth a retry.
     return { source: 'pdf', payload: null, confidence: 0, error: 'not_a_pdf' };
   }
   if (text.replace(/-- \d+ of \d+ --/g, '').trim() === '') {
-    // A scanned PDF: images only. Rasterize + OCR is not implemented.
+    // A scan (images only): rasterize + OCR is not implemented.
     return { source: 'pdf', payload: null, confidence: 0, error: 'no_text_layer' };
   }
   return { source: 'pdf', payload: parseDocumentText(type, text), confidence: PDF_TEXT_CONFIDENCE };
 }
 
-/**
- * One reading per uploaded document that has no structured payload and a
- * readable format (PNG/JPEG images, PDFs). Keyed by document id; other
- * documents are absent from the map and keep the "unreadable upload" rule.
- */
+
 export async function readUploadedDocuments(
   docs: readonly ReadableDocument[],
   deps: ReadDeps,

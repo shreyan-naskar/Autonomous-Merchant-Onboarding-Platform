@@ -14,11 +14,9 @@ import type { ApplicationDetailRows, ApplicationListRow, ReviewQueueRow } from '
 import type { JobRow } from '../jobs/deadLetter.js';
 
 /*
- * The response-mapping layer. Every application-related response body is
- * built here, and this is the only place sensitive values are masked: routes
- * pass raw DB rows in and send whatever comes out. Free-form JSON (document
- * payloads, audit details) goes through maskDeep(); verification raw provider
- * responses are not exposed at all.
+ * The only place sensitive values are masked: every application response is
+ * built here from raw rows, so a route cannot forget to mask. Raw provider
+ * responses are never exposed.
  */
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -118,7 +116,6 @@ export function toReviewQueueItemDto(row: ReviewQueueRow): ReviewQueueItemDto {
   return { ...toTaskDto(row), application_id: row.applicationId, merchant_name: row.merchantName, application_status: row.applicationStatus };
 }
 
-/** Dead-letter row. The payload is masked (maskDeep) and the error redacted, like any other response. */
 export function toDeadJobDto(job: JobRow): DeadJobDto {
   const appId = (job.payload as Record<string, unknown> | null)?.application_id;
   return {

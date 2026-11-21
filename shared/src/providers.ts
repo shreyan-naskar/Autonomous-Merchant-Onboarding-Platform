@@ -1,15 +1,10 @@
 import { z } from 'zod';
 import { VerificationKindSchema, type VerificationKind } from './domain.js';
 
-/**
- * Wire contract between the API and the (mock) verification providers.
- * Requests are answered `202 {request_id}`; the outcome arrives later as a
- * signed callback (X-Signature = hex HMAC-SHA256 of the raw body).
- */
+/** Requests are answered 202; the result arrives later as a callback signed with HMAC-SHA256 over the raw body. */
 
 export const SIGNATURE_HEADER = 'x-signature';
 
-/** Provider endpoint per verification kind. */
 export const PROVIDER_PATHS: Record<VerificationKind, string> = {
   PAN: '/pan/verify',
   GST: '/gst/verify',
@@ -45,7 +40,7 @@ export type ProviderRequest<K extends VerificationKind = VerificationKind> = z.i
 export const ProviderAcceptedSchema = z.object({ request_id: z.string().min(1) });
 export type ProviderAccepted = z.infer<typeof ProviderAcceptedSchema>;
 
-/** Outcome of one check. Risk always carries a 0-100 score; a high score is not a failure. */
+/** Risk is a score, not pass/fail: a high score sends the application to a reviewer instead of failing a check. */
 export const ProviderResultSchema = z.object({
   status: z.enum(['PASSED', 'FAILED']),
   reason: z.string().max(100).optional(),
@@ -64,25 +59,19 @@ export const ProviderCallbackSchema = z.object({
 });
 export type ProviderCallback = z.infer<typeof ProviderCallbackSchema>;
 
-/** Global chaos settings of the mock providers (POST/GET /admin/config). */
 export const ChaosConfigSchema = z.object({
-  /** Delay before a callback is sent. */
   delayMs: z.number().int().min(0).max(600_000),
-  /** Kinds that always fail. */
   failKinds: z.array(VerificationKindSchema),
-  /** Send each callback twice with the same event_id. */
   duplicateCallback: z.boolean(),
-  /** Never send callbacks (the API times out). */
   dropCallback: z.boolean(),
-  /** When > 0, callbacks are sent after this delay instead of delayMs (after the API's timeout). */
+  /** When > 0, replaces delayMs; longer than the API's timeout, so the answer arrives late. */
   lateCallbackMs: z.number().int().min(0).max(3_600_000),
-  /** Provider outage: every verify request is refused with 503 (nothing is sent back). */
   outage: z.boolean(),
 });
 export type ChaosConfig = z.infer<typeof ChaosConfigSchema>;
 export const ChaosConfigPatchSchema = ChaosConfigSchema.partial().strict();
 
-/** Magic values understood by the mock providers (documented in sample-data/README.md). */
+/** Documented in sample-data/README.md. */
 export const MAGIC = {
   failingPan: 'ZZZZZ9999Z',
   failingGstSuffix: 'Z9',

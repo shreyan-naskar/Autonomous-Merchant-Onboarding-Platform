@@ -12,12 +12,7 @@ function isBodyParserError(err: unknown): err is { type: string; status: number 
   return typeof err === 'object' && err !== null && 'type' in err && 'status' in err;
 }
 
-/**
- * Central error handler. Express 5 forwards rejected promises from async
- * handlers here, so routes just throw. Responses never include raw input
- * values: Zod issues are reduced to path/code/message, unknown errors become
- * a generic 500, and any message we do return is passed through redactText().
- */
+/** Responses never include raw input: Zod issues are reduced to path and message, unknown errors become a generic 500, and every message goes through redactText(). */
 export function errorHandler(logger: Logger): ErrorRequestHandler {
   return (err, req, res, _next) => {
     let status = 500;
@@ -42,7 +37,7 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
         },
       };
     } else if (err instanceof multer.MulterError) {
-      // Upload limits / unexpected file parts. Messages are multer's fixed strings.
+      // Multer's messages are fixed strings.
       status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
       body = { error: { code: 'UPLOAD_REJECTED', message: err.message, details: { reason: err.code, field: err.field } } };
     } else if (isBodyParserError(err) && err.status >= 400 && err.status < 500) {
@@ -54,18 +49,14 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     }
 
     const log = status >= 500 ? logger.error.bind(logger) : logger.warn.bind(logger);
-    // The path can contain a PAN or account number (typed into a URL): redact it.
+    // A PAN or account number can be typed into a URL.
     log({ err, method: req.method, path: redactText(req.originalUrl.split('?')[0] ?? ''), status }, 'request failed');
 
     res.status(status).json(body);
   };
 }
 
-/**
- * Unknown routes: JSON 404 (never Express's HTML page). The path is echoed
- * for debugging but redacted, since a PAN or account number can end up in a
- * URL.
- */
+/** JSON, never Express's HTML page; the echoed path is redacted. */
 export const notFoundHandler: RequestHandler = (req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: redactText(`No route ${req.method} ${req.path}`) } });
 };

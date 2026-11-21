@@ -10,11 +10,7 @@ import {
 import { sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-/*
- * Conventions: timestamps are epoch milliseconds (integer) from an injected
- * clock; booleans are 0/1 integers; JSON columns are text. Kept to plain SQL
- * types so a Postgres port is mechanical.
- */
+/* Epoch-ms integers, 0/1 booleans, JSON as text: plain SQL types, so a Postgres port is mechanical. */
 
 export const applications = sqliteTable(
   'applications',
@@ -48,9 +44,7 @@ export const documents = sqliteTable(
       .notNull()
       .references(() => applications.id),
     type: text().notNull(),
-    // File path for uploads; null for structured JSON documents.
     path: text(),
-    // Structured document body (JSON) when submitted as JSON.
     payload: text({ mode: 'json' }),
     blurScore: real('blur_score'),
     createdAt: integer('created_at').notNull(),
@@ -89,7 +83,6 @@ export const verifications = sqliteTable(
     bankVersion: integer('bank_version').notNull(),
     // Set when a newer check of the same kind replaces this one (e.g. bank change).
     superseded: integer({ mode: 'boolean' }).notNull().default(false),
-    // Risk score 0-100 for RISK checks.
     score: integer(),
     requestedAt: integer('requested_at').notNull(),
     completedAt: integer('completed_at'),
@@ -118,7 +111,7 @@ export const callbackEvents = sqliteTable(
     note: text(),
   },
   (t) => [
-    // Idempotency: only one non-duplicate row per provider event_id.
+    // Idempotency: one non-duplicate row per event_id. Redeliveries are still stored (is_duplicate) for the audit trail.
     uniqueIndex('callback_events_event_id_uq')
       .on(t.eventId)
       .where(sql`${t.isDuplicate} = 0`),
@@ -155,9 +148,7 @@ export const reviewTasks = sqliteTable(
     reason: text().notNull(),
     status: text({ enum: REVIEW_TASK_STATUSES }).notNull().default('OPEN'),
     resolution: text(),
-    // System-written description of why the task exists.
     note: text(),
-    // Operator's note when resolving (also in the audit detail).
     resolutionNote: text('resolution_note'),
     // The other application a POSSIBLE_DUPLICATE task links to (not a FK: informational).
     relatedApplicationId: text('related_application_id'),
@@ -184,12 +175,7 @@ export const jobs = sqliteTable(
   (t) => [index('jobs_due_idx').on(t.status, t.runAt)],
 );
 
-/**
- * Ledger of the simulated internal merchant ID service. The unique
- * application_id is the service's idempotency key: asking twice for the same
- * application returns the same MID, even across restarts or a crash between
- * issuing the ID and recording it on the application.
- */
+/** The unique application_id is the merchant ID service's idempotency key: asking twice returns the same MID, even after a crash. */
 export const merchantAccounts = sqliteTable('merchant_accounts', {
   merchantId: text('merchant_id').primaryKey(),
   applicationId: text('application_id')

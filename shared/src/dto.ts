@@ -10,15 +10,9 @@ import {
 } from './domain.js';
 import { DocumentTypeSchema } from './intake.js';
 
-/**
- * Response DTOs. Sensitive values (pan, gst, bank_account and the same keys
- * inside document payloads / audit details) are always masked to the last 4
- * characters by the API's response mapper; the web app only ever sees these.
- * Timestamps are ISO-8601 strings.
- */
+/** Sensitive values arrive already masked by the API's response mapper; the web app never sees raw ones. */
 
 const iso = z.string();
-/** Masked value, e.g. "******234F". */
 const masked = z.string().nullable();
 const jsonValue = z.unknown();
 
@@ -49,7 +43,7 @@ export type ApplicationListDto = z.infer<typeof ApplicationListDtoSchema>;
 export const DocumentDtoSchema = z.object({
   id: z.number().int(),
   type: DocumentTypeSchema,
-  /** Stored file name for uploads (no server path); null for JSON documents. */
+  /** Never the server path. */
   file_name: z.string().nullable(),
   payload: jsonValue,
   blur_score: z.number().nullable(),
@@ -92,7 +86,6 @@ export const ReviewTaskDtoSchema = z.object({
   resolved_at: iso.nullable(),
 });
 
-/** Review queue row: a task plus enough of its application to act on it. */
 export const ReviewQueueItemDtoSchema = ReviewTaskDtoSchema.extend({
   application_id: z.string(),
   merchant_name: z.string(),
@@ -102,7 +95,7 @@ export type ReviewQueueItemDto = z.infer<typeof ReviewQueueItemDtoSchema>;
 export const ReviewQueueDtoSchema = z.object({ items: z.array(ReviewQueueItemDtoSchema), count: z.number().int() });
 export type ReviewQueueDto = z.infer<typeof ReviewQueueDtoSchema>;
 
-/** Provider callbacks received for the application (duplicates included). No payload. */
+/** Duplicates included, payloads never. */
 export const CallbackEventDtoSchema = z.object({
   id: z.number().int(),
   event_id: z.string(),
@@ -111,7 +104,6 @@ export const CallbackEventDtoSchema = z.object({
   received_at: iso,
   is_duplicate: z.boolean(),
   processed: z.boolean(),
-  /** Outcome: applied, late, stale, already_completed, mismatch, unknown_request, duplicate ignored. */
   note: z.string().nullable(),
 });
 export type CallbackEventDto = z.infer<typeof CallbackEventDtoSchema>;
@@ -136,27 +128,22 @@ export const ApplicationDetailDtoSchema = ApplicationSummaryDtoSchema.extend({
 });
 export type ApplicationDetailDto = z.infer<typeof ApplicationDetailDtoSchema>;
 
-/** `GET /metrics`, computed from audit_log. */
 export const StateMetricDtoSchema = z.object({
   state: ApplicationStatusSchema,
-  /** Mean duration of completed stays in this state (entered and later left); null if none. */
+  /** Completed stays only (entered and later left). */
   avg_ms: z.number().nullable(),
-  /** Number of completed stays averaged. */
   completed: z.number().int(),
-  /** Applications in this state right now. */
   current: z.number().int(),
 });
 export const MetricsDtoSchema = z.object({
   total_applications: z.number().int(),
   /** Applications that ever entered IN_REVIEW or NEEDS_INFO. */
   exception_count: z.number().int(),
-  /** exception_count / total_applications (0 when there are none). */
   exception_rate: z.number(),
   states: z.array(StateMetricDtoSchema),
 });
 export type MetricsDto = z.infer<typeof MetricsDtoSchema>;
 
-/** Dead-letter view row: a `dead` job. Payload masked like every other response. */
 export const DeadJobDtoSchema = z.object({
   id: z.number().int(),
   type: z.string(),

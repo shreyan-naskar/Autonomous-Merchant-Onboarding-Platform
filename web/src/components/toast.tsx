@@ -14,7 +14,7 @@ interface ToastItem extends Required<Pick<ToastInput, 'tone' | 'title'>> {
 
 const ToastContext = createContext<{ push: (t: ToastInput) => void } | null>(null)
 
-/** For code outside React (the query client's global error handler). */
+/** For code outside React: the query client's global error handler. */
 const external = new Set<(t: ToastInput) => void>()
 export function emitToast(t: ToastInput) {
   for (const l of external) l(t)
@@ -26,10 +26,6 @@ const STYLE = {
   info: { icon: Info, ring: 'ring-info-200', icn: 'text-info-700' },
 }
 
-/**
- * Toasts: short confirmations and errors, bottom right, auto-dismissed after
- * 5 seconds (errors after 8). Announced through a polite live region.
- */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
   const next = useRef(1)
@@ -78,7 +74,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   )
 }
 
-/** push({tone, title, message}). Outside a provider (e.g. isolated tests) it is a no-op. */
+/** A no-op outside a provider (isolated tests). */
 export function useToast() {
   return useContext(ToastContext) ?? { push: () => {} }
 }

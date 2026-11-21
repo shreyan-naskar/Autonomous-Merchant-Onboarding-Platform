@@ -14,7 +14,6 @@ export interface FieldProblem {
 export interface ExtractionDecision {
   to: Extract<ApplicationStatus, 'NEEDS_INFO' | 'IN_REVIEW' | 'VERIFYING'>;
   reason: ExtractionReason;
-  /** Audit event for the transition. */
   event: AuditEvent;
   /** What the merchant must supply: `form.<field>`, `document.<TYPE>`, `<TYPE>.<payload key>`. */
   missing: string[];
@@ -24,17 +23,10 @@ export interface ExtractionDecision {
 }
 
 /**
- * What to do after extraction. Pure. As in the brief: the system "requests
- * missing information or routes exceptions to a human reviewer". First
- * matching rule wins:
- *  1. anything missing           -> NEEDS_INFO (MISSING_INFO)
- *  2. any blurry uploaded image  -> IN_REVIEW  (BLURRY_DOCUMENT)
- *  3. any field mismatches       -> IN_REVIEW  (DOC_CONFLICT)
- *  4. any confidence < threshold -> IN_REVIEW  (LOW_CONFIDENCE)
- *  5. otherwise                  -> VERIFYING  (EXTRACTION_OK)
- * Missing comes first because asking the merchant is cheaper than a review,
- * and a review of an incomplete application would just bounce back. A blurry
- * image comes before conflicts because nothing read from it can be trusted.
+ * Missing information goes back to the merchant; exceptions (blurry, conflict,
+ * low confidence) go to a reviewer. Missing comes first because a review of an
+ * incomplete application would just bounce back; blurry comes before conflicts
+ * because nothing read from a blurry image can be trusted.
  */
 export function decideAfterExtraction(
   result: ExtractionResult,

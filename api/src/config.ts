@@ -6,7 +6,6 @@ export const DEV_HMAC_SECRET = 'dev-only-hmac-secret-change-me';
 const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   DB_PATH: z.string().min(1).default('./data/app.db'),
-  // Relative to the API's working directory (api/ under npm workspaces).
   UPLOAD_DIR: z.string().min(1).default('./uploads'),
   WEBHOOK_URL: z.url().default('http://localhost:3000/webhooks/provider'),
   MOCK_PROVIDER_URL: z.url().default('http://localhost:4000'),
@@ -14,12 +13,9 @@ const EnvSchema = z.object({
   DEMO_MODE: z.stringbool().default(true),
   CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.8),
   RISK_THRESHOLD: z.coerce.number().min(0).max(100).default(70),
-  // Minimum normalized name similarity (0-1) between form and document names.
   NAME_MATCH_THRESHOLD: z.coerce.number().min(0).max(1).default(0.85),
-  // Laplacian variance below which an uploaded image is BLURRY_DOCUMENT.
-  // Calibrated on sample-data/pan-sharp.png (~990) vs pan-blurry.png (~1.7).
+  // Laplacian variance. Calibrated on sample-data/pan-sharp.png (~990) vs pan-blurry.png (~1.7).
   BLUR_THRESHOLD: z.coerce.number().min(0).default(30),
-  // Where tesseract.js keeps its downloaded English model.
   OCR_CACHE_DIR: z.string().min(1).default('./.ocr-cache'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
@@ -48,10 +44,7 @@ function applyAliases(env: Env): Env {
   return out;
 }
 
-/**
- * Parse configuration from an env-like object. Pure (no process access) so
- * tests can build any config they need.
- */
+/** Pure (no process access), so tests can build any config. */
 export function loadConfig(env: Env = process.env) {
   const e = EnvSchema.parse(applyAliases(env));
   const demo = e.DEMO_MODE;
@@ -72,17 +65,13 @@ export function loadConfig(env: Env = process.env) {
     },
     ocrCacheDir: e.OCR_CACHE_DIR,
     timings: {
-      // How long a provider request may stay PENDING before it is TIMED_OUT.
       verificationTimeoutMs: demo ? 30_000 : 15 * 60_000,
-      // Exponential backoff base for job retries: base * 2^(attempt-1).
       backoffBaseMs: demo ? 1_000 : 60_000,
       workerPollMs: demo ? 500 : 2_000,
     },
     limits: {
       jobMaxAttempts: 5,
-      // Re-requests after a verification timeout before escalating to review.
       verificationMaxRetries: 2,
-      // Tries of create_merchant before MERCHANT_CREATION_FAILED (backoff between them).
       merchantCreateMaxAttempts: 3,
     },
   } as const;

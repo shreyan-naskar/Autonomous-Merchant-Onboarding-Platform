@@ -3,13 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { callbackEvents } from './db/schema.js';
 import { events, openTask, sample, sampleFile, startE2E, type E2E } from './e2e.js';
 
-/*
- * The failure scenarios from the brief (docs/PROBLEM.md), one test each,
- * end to end: API + mock providers in-process on random ports, real HTTP and
- * signed callbacks both ways, the worker on a fake clock, callbacks on
- * virtual time (see e2e.ts). Listed in README.md ("Failure scenarios"). Each
- * scenario is also covered in more detail next to the code it exercises.
- */
+/* One end-to-end test per failure scenario in docs/PROBLEM.md (listed in the README). */
 
 let e: E2E;
 beforeEach(async () => {

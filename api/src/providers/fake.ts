@@ -8,19 +8,12 @@ export interface FakeCall {
 }
 
 export interface FakeProviderClient extends ProviderClient {
-  /** Accepted requests, in order. */
   readonly calls: FakeCall[];
-  /** Kinds whose requests currently reject (provider unreachable). */
   readonly failing: Set<VerificationKind>;
-  /** The latest accepted call for a kind. */
   last(kind: VerificationKind): FakeCall | undefined;
 }
 
-/**
- * In-memory ProviderClient for unit tests: accepts every request with a
- * predictable request_id and never calls back (tests post callbacks
- * themselves). Add a kind to `failing` to simulate an unreachable provider.
- */
+/** Never calls back: tests post callbacks themselves. Add a kind to `failing` to simulate an outage. */
 export function createFakeProviderClient(): FakeProviderClient {
   const calls: FakeCall[] = [];
   const failing = new Set<VerificationKind>();

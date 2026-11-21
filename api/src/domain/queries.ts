@@ -23,7 +23,6 @@ export interface ApplicationDetailRows {
   verifications: (typeof verifications.$inferSelect)[];
   reviewTasks: (typeof reviewTasks.$inferSelect)[];
   callbacks: (typeof callbackEvents.$inferSelect)[];
-  /** Ids of the verification rows currentVerification() picks, one per kind at most. */
   currentVerificationIds: Set<number>;
   auditLog: (typeof auditLog.$inferSelect)[];
 }
@@ -54,7 +53,6 @@ export type ReviewQueueRow = typeof reviewTasks.$inferSelect & {
   applicationStatus: ApplicationStatus;
 };
 
-/** Review tasks with their application's name and status; oldest first (a queue). */
 export function listReviewTasks(
   db: Db,
   { status = 'OPEN', limit = 200 }: { status?: 'OPEN' | 'RESOLVED'; limit?: number } = {},

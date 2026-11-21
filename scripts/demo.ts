@@ -1,20 +1,10 @@
 /**
- * End-to-end demo: `npm run demo`.
+ * `npm run demo`: happy path to a merchant ID, one redelivered callback,
+ * gst-fail to review and rejection, audit trails, and a scan of the API log
+ * for raw PAN / account values. Exits non-zero if any check fails.
  *
- *  1. Resets the data. If the API (:3000) and mock providers (:4000) are not
- *     running, starts both with a fresh DB (api/data/demo.db, logs in
- *     api/data/demo-*.log). If both are running (e.g. `npm run dev`), uses
- *     them and resets through POST /admin/reset-data (DEMO_MODE only) and the
- *     mock's POST /admin/reset.
- *  2. happy.json -> ... -> MERCHANT_CREATED (merchant ID issued).
- *  3. The mock provider redelivers one of its callbacks (same event_id, same
- *     signature): the API answers "duplicate" and nothing changes.
- *  4. gst-fail.json -> IN_REVIEW (PAN_OK_GST_FAILED) -> operator REJECT with a note.
- *  5. Prints both audit trails (values come masked from the API).
- *  6. When it started the services: checks the API log for raw PAN/GSTIN/account.
- * Exits non-zero if any expectation fails.
- *
- * Flags: --external (require running services), --spawn (never use running ones).
+ * Starts its own services on a fresh api/data/demo.db, or reuses running ones
+ * and DELETES their data (--external / --spawn force one or the other).
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
@@ -36,7 +26,6 @@ const TSX = join(ROOT, 'node_modules', '.bin', 'tsx');
 const sample = (name: string) => JSON.parse(readFileSync(join(ROOT, 'sample-data', name), 'utf8'));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ---------- output ----------
 const c = process.stdout.isTTY
   ? { bold: (s: string) => `\x1b[1m${s}\x1b[0m`, dim: (s: string) => `\x1b[2m${s}\x1b[0m`, green: (s: string) => `\x1b[32m${s}\x1b[0m`, red: (s: string) => `\x1b[31m${s}\x1b[0m` }
   : { bold: (s: string) => s, dim: (s: string) => s, green: (s: string) => s, red: (s: string) => s };
@@ -88,7 +77,6 @@ function printTrail(d: ApplicationDetailDto) {
   );
 }
 
-// ---------- HTTP ----------
 async function http<T>(base: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<{ status: number; body: T }> {
   const res = await fetch(base + path, {
     method: init.method ?? 'GET',
@@ -115,7 +103,6 @@ async function waitFor(what: string, fn: () => Promise<boolean>, timeoutMs: numb
 
 const detail = async (id: string) => (await http<ApplicationDetailDto>(API_URL, `/applications/${id}`)).body;
 
-/** Poll until the app reaches `target` (or a state in `stopAt`), printing each new state. */
 async function follow(id: string, target: string, timeoutMs = 60_000): Promise<ApplicationDetailDto> {
   const seen: string[] = [];
   const start = Date.now();
@@ -131,7 +118,6 @@ async function follow(id: string, target: string, timeoutMs = 60_000): Promise<A
   }
 }
 
-// ---------- services ----------
 const children: ChildProcess[] = [];
 function startService(name: string, cwd: string, env: Record<string, string>, logPath: string) {
   const log = createWriteStream(logPath);
@@ -188,7 +174,6 @@ async function prepare(): Promise<'spawned' | 'external'> {
   return 'spawned';
 }
 
-// ---------- the demo ----------
 async function main() {
   console.log(c.bold('Merchant onboarding demo'));
   step(1, 'Reset and services');

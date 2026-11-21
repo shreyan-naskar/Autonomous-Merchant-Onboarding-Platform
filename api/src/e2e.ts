@@ -20,12 +20,7 @@ import { createLogger } from './logger.js';
 import { createSimulatedMerchantService } from './merchant/service.js';
 import { createHttpProviderClient } from './providers/client.js';
 
-/*
- * End-to-end test harness (tests only): API + mock providers in-process on
- * random ports, real HTTP and signed callbacks both ways, the worker on a
- * fake clock, callbacks on virtual time. Used by scenarios.test.ts and
- * security.test.ts.
- */
+/* Test harness: API and mock providers on random ports, signed callbacks, the worker on a fake clock, callbacks on virtual time. */
 
 export const SAMPLE_DIR = fileURLToPath(new URL('../../sample-data/', import.meta.url));
 export const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));

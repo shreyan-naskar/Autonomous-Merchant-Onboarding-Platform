@@ -6,14 +6,12 @@ import { currentVerification } from '../verification/latest.js';
 
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-/** Runs inside transition()'s DB transaction; throw GuardError to block the move. */
 export type Guard = (tx: Tx, app: Application) => void;
 
 /**
- * APPROVED requires every REQUIRED_CHECK to be PASSED on its latest
- * non-superseded attempt, and the BANK check must be for the application's
- * current bank_version (a bank change invalidates earlier results).
- * The error message names each blocking check and why, for the operator.
+ * Every check PASSED on its latest attempt, and BANK for the current
+ * bank_version: a bank change invalidates the earlier result, so an
+ * application can never be approved with unverified bank details.
  */
 export const approvalGuard: Guard = (tx, app) => {
   const blocking: { kind: VerificationKind; status: string }[] = [];
@@ -36,7 +34,6 @@ export const approvalGuard: Guard = (tx, app) => {
   }
 };
 
-/** Guards keyed by target state. */
 export const GUARDS: Partial<Record<ApplicationStatus, Guard>> = {
   APPROVED: approvalGuard,
 };

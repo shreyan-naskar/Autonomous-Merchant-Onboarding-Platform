@@ -36,8 +36,6 @@ import { Badge, Button, EmptyState, ErrorAlert, Input, TONE_SOFT, Tooltip, cx, t
 
 type App = ApplicationDetailDto
 
-// ---------------------------------------------------------------------------
-// Progress stepper
 
 const STEPS: readonly ApplicationStatus[] = ['SUBMITTED', 'EXTRACTING', 'VERIFYING', 'VERIFIED', 'APPROVED', 'MERCHANT_CREATED']
 const STEP_NAMES: Record<string, string> = {
@@ -49,11 +47,10 @@ const STEP_NAMES: Record<string, string> = {
   MERCHANT_CREATED: 'Merchant created',
 }
 
-/** Where the happy path stands, and (for exception states) where it branched off. */
 function stepState(app: App): { index: number; branch?: { status: ApplicationStatus; tone: Tone } } {
   const at = STEPS.indexOf(app.status)
   if (at >= 0) return { index: at }
-  // Exception: branch off the last happy-path step the application reached.
+  // An exception state branches off the last happy-path step it reached.
   const reached = app.audit_log
     .map((a) => a.to_state)
     .filter((s): s is ApplicationStatus => s !== null && STEPS.includes(s))
@@ -100,8 +97,6 @@ export function Stepper({ app }: { app: App }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Verification cards
 
 const CARD_TONE: Record<string, string> = {
   PENDING: 'border-info-200 bg-info-50/60',
@@ -110,11 +105,7 @@ const CARD_TONE: Record<string, string> = {
   TIMED_OUT: 'border-warning-200 bg-warning-50/60',
 }
 
-/**
- * One card per check: the row the API marks `is_current` (what approval
- * looks at). Late, stale and duplicate markers come from the audit log and
- * the callbacks list; earlier attempts are listed underneath.
- */
+/** Shows the row the API marks is_current: the one the approval guard looks at. */
 export function VerificationCards({ app }: { app: App }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -213,8 +204,6 @@ export function VerificationCards({ app }: { app: App }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Extracted fields
 
 const FIELD_NAMES: Record<string, string> = {
   pan: 'PAN',
@@ -282,8 +271,6 @@ export function ExtractedFields({ app }: { app: App }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Timeline (audit log)
 
 const ACTOR_ICON: Record<Actor, { icon: LucideIcon; tone: Tone }> = {
   system: { icon: Cog, tone: 'neutral' },
@@ -292,14 +279,12 @@ const ACTOR_ICON: Record<Actor, { icon: LucideIcon; tone: Tone }> = {
   merchant: { icon: Building2, tone: 'warning' },
 }
 
-/** The audit trail, oldest first. Details are already masked by the API. */
 export function Timeline({ entries }: { entries: App['audit_log'] }) {
   return (
     <ol className="relative space-y-4 border-l border-neutral-200 pl-6" aria-label="Audit trail">
       {entries.map((a) => {
         const actor = ACTOR_ICON[a.actor]
         const label = EVENT_LABELS[a.event as AuditEvent] ?? humanize(a.event)
-        // Provider events name the check (and the answer) in the detail.
         const d = (a.detail ?? {}) as { kind?: string; status?: string }
         const check = d.kind && d.kind in CHECK_LABELS ? CHECK_LABELS[d.kind as keyof typeof CHECK_LABELS] : null
         const answer = a.event === 'VERIFICATION_RESULT' || a.event === 'LATE_CALLBACK' ? d.status : undefined
@@ -348,8 +333,6 @@ export function Timeline({ entries }: { entries: App['audit_log'] }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Documents
 
 export function DocumentsList({ app }: { app: App }) {
   if (app.documents.length === 0) return <EmptyState icon={FileText} title="No documents" text="This application was submitted without documents." />
@@ -396,14 +379,7 @@ export function DocumentsList({ app }: { app: App }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Bank details
 
-/**
- * Current bank details (masked), the bank check history, and the merchant's
- * change form. The API decides what a change does (re-verification, 409
- * once approved).
- */
 export function BankDetails({ app }: { app: App }) {
   const qc = useQueryClient()
   const toast = useToast()

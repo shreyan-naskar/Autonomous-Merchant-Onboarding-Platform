@@ -2,11 +2,7 @@ import type { ApplicationListDto, ChaosConfig, DeadJobListDto, MerchantServiceCo
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { api, mockApi } from './api.ts'
 
-/*
- * Shared queries: one cache entry each, reused by the sidebar badges, the
- * global search, the banners and the pages. All poll (3s default, see
- * main.tsx) and keep the previous data while refetching, so nothing flashes.
- */
+/* One cache entry each, shared by badges, search, banners and pages. Previous data is kept while refetching, so polls never flash. */
 
 export const qk = {
   applications: ['applications'] as const,
@@ -19,7 +15,6 @@ export const qk = {
   merchantService: ['merchant-service'] as const,
 }
 
-/** Every application (newest first, up to 500); pages filter client-side. */
 export const useApplications = () =>
   useQuery({ queryKey: qk.applications, queryFn: () => api.get<ApplicationListDto>('/applications?limit=500'), placeholderData: keepPreviousData })
 
@@ -31,7 +26,7 @@ export const useDeadJobs = () =>
 
 export const useMetrics = () => useQuery({ queryKey: qk.metrics, queryFn: () => api.get<MetricsDto>('/metrics'), placeholderData: keepPreviousData })
 
-/** API liveness for the top bar dot (5s; never retried, so a failure shows quickly). */
+/** Never retried, so an outage shows quickly. */
 export const useHealth = () =>
   useQuery({ queryKey: qk.health, queryFn: () => api.get<{ status: string }>('/health'), refetchInterval: 5000, retry: false, meta: { silent: true } })
 

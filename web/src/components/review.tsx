@@ -55,11 +55,7 @@ const DONE: Record<ReviewResolution, string> = {
   DISMISS: 'Task dismissed',
 }
 
-/**
- * Confirm an operator decision. The note is required (same rule as the
- * API: at least REVIEW_NOTE_MIN characters), with a live count. A 409 (guard
- * or wrong state) is shown inline in plain words; the dialog stays open.
- */
+/** A 409 (guard or wrong state) is shown inline and the dialog stays open, so the reviewer keeps their note. */
 export function ReviewDialog({
   open,
   onClose,
@@ -139,7 +135,6 @@ export function ReviewDialog({
   )
 }
 
-/** The actions an operator can take on one open task (same rule as the API: resolutionsFor). */
 export function TaskActions({
   task,
   applicationId,
@@ -174,7 +169,6 @@ export function TaskActions({
   )
 }
 
-/** One review task: plain-language reason, the application, its age, the note, and actions. */
 export function TaskCard({
   task,
   applicationId,

@@ -11,32 +11,23 @@ import {
 } from '@app/shared';
 import type { DocumentReading } from './read.js';
 
-/*
- * Extraction for structured (JSON) documents. Pure: takes the application's
- * form values and its documents, returns one row per expected document field
- * plus what is missing. No DB, no clock.
- */
+/* Pure: form values + documents in, one row per expected field plus what is missing out. */
 
-/** Every application needs one of each. */
 export const REQUIRED_DOCUMENTS: readonly DocumentType[] = DOCUMENT_TYPES;
 
-/** Form fields (wire names) required before verification can start. */
 export const REQUIRED_FORM_FIELDS = ['pan', 'gst', 'bank_account', 'ifsc'] as const;
 export type FormField = (typeof REQUIRED_FORM_FIELDS)[number];
 
-/** Confidence for a value read from structured JSON. */
 export const STRUCTURED_CONFIDENCE = 1.0;
-/** Confidence for a value that is present but fails its format rule (below the 0.8 default threshold). */
+/** Below the default 0.8 threshold, so a malformed value goes to review. */
 export const FORMAT_FAIL_CONFIDENCE = 0.5;
-/** An uploaded file with no structured payload that could not be read (not OCR-able, blurry, or the value was not found). */
 export const UNREADABLE_CONFIDENCE = 0;
 
 type ValueKind = 'pan' | 'gstin' | 'bank_account' | 'ifsc' | 'name';
 
 interface FieldSpec {
-  /** Key in the document payload. */
   key: string;
-  /** Stored extracted_fields.field. pan / gst / bank_account are masked by name in responses. */
+  /** pan / gst / bank_account are masked by this name in every response. */
   field: string;
   kind: ValueKind;
 }
@@ -76,14 +67,12 @@ export type FieldIssue =
 export interface ExtractedFieldResult {
   documentType: DocumentType;
   documentId: number;
-  /** Payload key the value came from (for messages like "GST_CERT.gstin"). */
   sourceKey: string;
   field: string;
   value: string | null;
   confidence: number;
   validationStatus: ValidationStatus;
   issue?: FieldIssue;
-  /** Name similarity to the form's merchant name (name fields only). */
   similarity?: number;
 }
 
@@ -113,7 +102,6 @@ export interface ExtractionDocument {
   type: string;
   payload: unknown;
   path: string | null;
-  /** What was read from the uploaded file (OCR), when it was read. */
   reading?: DocumentReading;
 }
 
@@ -124,7 +112,6 @@ const FORM_KEY: Record<FormField, keyof ExtractionForm> = {
   ifsc: 'ifsc',
 };
 
-/** Normalize a document value: trim; codes are case-insensitive so uppercase them. */
 function readValue(payload: Record<string, unknown>, spec: FieldSpec): string | null {
   const raw = payload[spec.key];
   if (raw === undefined || raw === null) return null;
@@ -133,7 +120,6 @@ function readValue(payload: Record<string, unknown>, spec: FieldSpec): string | 
   return spec.kind === 'name' ? s : s.toUpperCase();
 }
 
-/** Compare a well-formed document value with the form. Returns the first conflict, if any. */
 function compareWithForm(
   spec: FieldSpec,
   value: string,
@@ -162,18 +148,10 @@ function compareWithForm(
 }
 
 /**
- * Map documents to extracted fields. Per field, first matching rule wins:
- *  - blurry uploaded image          -> `low_confidence`, confidence 0 (`blurry`)
- *  - absent value                  -> `missing`, confidence 0
- *    (absent from an uploaded file's reading: `low_confidence`, `unreadable`)
- *  - uploaded file without payload -> `low_confidence`, confidence 0 (`unreadable`)
- *  - fails its format rule         -> `low_confidence`, confidence 0.5
- *  - disagrees with the form       -> `mismatch`, confidence 1.0
- *  - otherwise                     -> `ok`, confidence 1.0
- * Values read from a file (OCR) carry the read's confidence instead of 1.0
- * (and at most 0.5 when the format fails), so a poor read lands in
- * LOW_CONFIDENCE review through the normal threshold.
- * Unknown document types are ignored; extra payload keys (e.g. dob) are not extracted.
+ * Per field, first match wins: blurry image, absent, unreadable upload,
+ * bad format (0.5), differs from the form (`mismatch`), else `ok`. Values read
+ * from a file carry the read's confidence instead of 1.0, so a poor read
+ * reaches review through the normal confidence threshold.
  */
 export function extractFields(
   form: ExtractionForm,
@@ -202,10 +180,8 @@ export function extractFields(
     if (!doc) continue;
     const structured = doc.payload && typeof doc.payload === 'object';
     const payload = payloadOf(doc);
-    // Values read from a file are only as good as the read (OCR confidence).
     const fromFile = !structured && payload !== null;
     const sourceConfidence = fromFile ? doc.reading!.confidence : STRUCTURED_CONFIDENCE;
-    // OCR'd values carry the confidence of their own words when known.
     const confidenceOf = (key: string) => (fromFile ? (doc.reading!.fieldConfidence?.[key] ?? sourceConfidence) : sourceConfidence);
     const blurry = !structured && doc.reading?.blurry === true;
     if (blurry) blurryDocuments.push({ documentType: type, documentId: doc.id, blurScore: doc.reading!.blurScore! });

@@ -1,11 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-/*
- * Whether the API is reachable, as seen by the browser. Set by lib/api.ts on
- * every request (a fetch that throws = unreachable; any HTTP answer =
- * reachable) and by the shell's /api/health poll. Drives the non-blocking
- * "Can't reach the server" banner.
- */
+/* Any HTTP answer means reachable; only a fetch that throws (or a proxy 502/504) means unreachable. */
 
 let reachable = true
 const listeners = new Set<() => void>()

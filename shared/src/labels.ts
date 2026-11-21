@@ -9,20 +9,13 @@ import {
 } from './domain.js';
 import type { ReviewResolution } from './review.js';
 
-/*
- * Plain-language names for every code the UI shows: application states,
- * review task reasons, audit events, checks, actors. One place, so the web
- * app never prints a raw code to a non-technical audience (the code is still
- * available, e.g. in a tooltip). Records are keyed by the shared enums, so a
- * new state or event cannot be added without a label.
- */
+/* Plain language for every code the UI shows. Records are keyed by the shared enums, so a new state or event cannot ship without a label. */
 
 export type Severity = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 export interface Label {
   label: string;
   severity: Severity;
-  /** One line explaining what it means / what happens next. */
   description: string;
 }
 
@@ -117,10 +110,7 @@ export const EVENT_LABELS: Record<AuditEvent, string> = {
   JOB_REQUEUED: 'Background step requeued',
 };
 
-// ---------------------------------------------------------------------------
-// Review task reasons. The API creates exactly these (api/src/labels.test.ts
-// checks it): fixed codes, `<KIND>_TIMEOUT`, and verification results such as
-// `PAN_OK_GST_FAILED` (each check up to the last failed one, see evaluate.ts).
+// The API creates exactly these review reasons (api/src/labels.test.ts checks it).
 
 export const STATIC_REVIEW_REASONS = [
   'DOC_CONFLICT',
@@ -177,7 +167,6 @@ const STATIC_REASON_LABELS: Record<StaticReviewReason, Label> = {
   },
 };
 
-/** How each check appears inside a verification-result reason. */
 export const CHECK_RESULT_CODES = ['OK', 'FAILED', 'PENDING', 'TIMED_OUT'] as const;
 type CheckResultCode = (typeof CHECK_RESULT_CODES)[number];
 const CHECK_RESULT_WORDS: Record<CheckResultCode, (check: string) => string> = {
@@ -189,7 +178,7 @@ const CHECK_RESULT_WORDS: Record<CheckResultCode, (check: string) => string> = {
 
 export const timeoutReason = (kind: VerificationKind) => `${kind}_TIMEOUT`;
 
-/** Every verification-result reason evaluate() can produce (85 of them). */
+/** All 85 reasons evaluate() can produce. */
 export function verificationFailureReasons(order: readonly VerificationKind[] = VERIFICATION_KINDS): string[] {
   const out: string[] = [];
   for (let last = 0; last < order.length; last++) {
@@ -202,7 +191,6 @@ export function verificationFailureReasons(order: readonly VerificationKind[] = 
   return out;
 }
 
-/** Every review task reason the API can create. */
 export function allReviewReasons(): string[] {
   return [...STATIC_REVIEW_REASONS, ...VERIFICATION_KINDS.map(timeoutReason), ...verificationFailureReasons()];
 }
@@ -212,13 +200,12 @@ const RESULT_RE = CHECK_RESULT_CODES.join('|');
 const VERIFICATION_REASON_RE = new RegExp(`^(?:(?:${KIND_RE})_(?:${RESULT_RE})_)*(?:${KIND_RE})_FAILED$`);
 const PAIR_RE = new RegExp(`(${KIND_RE})_(${RESULT_RE})`, 'g');
 
-/** "SOME_CODE" -> "Some code" (fallback for codes without a label). */
 export const humanize = (code: string) => {
   const s = code.toLowerCase().replace(/_/g, ' ');
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
-/** Plain language for a review task reason. `known` is false only for codes this module has never heard of. */
+/** `known` is false only for a code this module has never heard of (the label test fails on those). */
 export function describeReason(code: string): Label & { known: boolean } {
   if ((STATIC_REVIEW_REASONS as readonly string[]).includes(code)) {
     return { ...STATIC_REASON_LABELS[code as StaticReviewReason], known: true };

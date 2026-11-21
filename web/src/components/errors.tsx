@@ -6,14 +6,7 @@ import { usePageTitle } from '../lib/pageTitle.tsx'
 import { NotFound } from '../pages/NotFound.tsx'
 import { Alert, Button, ErrorAlert, SkeletonRows } from './ui.tsx'
 
-/*
- * Page-level error states. Pages hand their query error to <PageError>:
- *  - 404           -> the NotFound page (with a resource-specific message)
- *  - 5xx           -> full-page "server had a problem" with Retry
- *  - network       -> keep the page; the top banner says we are retrying
- *  - anything else -> an inline alert
- * Never shows API payloads; messages from the API are already masked.
- */
+/* A lost connection never replaces the page: the offline banner covers it while the last data stays visible. */
 
 export function PageError({
   error,
@@ -75,11 +68,7 @@ function ErrorScreen({ icon: Icon, code, title, text, actions, children }: { ico
   )
 }
 
-/**
- * Shell-level error boundary: an unexpected render crash shows "Something
- * went wrong" with Retry (resets the boundary) and Go home. The stack is shown
- * in development builds only; nothing from API responses is shown.
- */
+/** The stack is shown in development builds only, and nothing from API responses is ever shown. */
 export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: string }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
 
@@ -88,7 +77,6 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Dev aid only; the API never sees this.
     console.error('UI crashed', error, info.componentStack)
   }
 
@@ -139,7 +127,6 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
   }
 }
 
-/** Non-blocking banner while the API is unreachable; clears itself when a request succeeds. */
 export function OfflineBanner() {
   const reachable = useServerReachable()
   if (reachable) return null
@@ -153,7 +140,6 @@ export function OfflineBanner() {
   )
 }
 
-/** Message used by global error toasts (mutations). */
 export const toastFor = (error: unknown) => {
   const f = friendlyError(error)
   return { title: f.title, message: f.message }

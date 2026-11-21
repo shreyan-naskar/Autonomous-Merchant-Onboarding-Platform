@@ -15,14 +15,9 @@ export function enqueueCreateMerchant(tx: Tx, appId: string, config: Config, now
 export type ApproveOutcome = 'approved' | 'high_risk' | 'possible_duplicate' | 'skipped';
 
 /**
- * The `approve` job (enqueued when evaluate() reaches VERIFIED). Risk score
- * <= RISK_THRESHOLD: VERIFIED -> APPROVED (actor system, AUTO_APPROVED) and
- * create_merchant is enqueued. Otherwise VERIFIED -> IN_REVIEW with a
- * HIGH_RISK review task (a missing score is treated as high risk).
- * An open POSSIBLE_DUPLICATE task also holds the app in IN_REVIEW (event
- * POSSIBLE_DUPLICATE, no new task: the operator decides on the duplicate
- * task, plus a HIGH_RISK task when the score is also too high).
- * Not in VERIFIED (already approved, bank changed, ...): no-op.
+ * Risk is a score, not a failed check: above RISK_THRESHOLD (or missing) the
+ * application waits for a person instead of being approved. An open
+ * POSSIBLE_DUPLICATE task holds it the same way.
  */
 export function runApprove(deps: VerificationDeps, appId: string): ApproveOutcome {
   const { db, config, logger, now } = deps;

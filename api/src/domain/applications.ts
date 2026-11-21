@@ -19,9 +19,7 @@ export interface NewApplicationInput {
 
 export interface NewDocumentInput {
   type: DocumentType;
-  /** Structured document body (JSON submissions). */
   payload?: Record<string, unknown> | null;
-  /** Saved upload location (multipart submissions). */
   path?: string | null;
 }
 
@@ -62,10 +60,7 @@ function insertApplication(tx: Tx, input: NewApplicationInput, now: number, id: 
   return app;
 }
 
-/**
- * Insert a new application in SUBMITTED with its creation audit row.
- * This is the only place a status is set outside transition(): the initial one.
- */
+/** The only status write outside transition(): the initial SUBMITTED. */
 export function createApplication(
   db: Db,
   input: NewApplicationInput,
@@ -74,11 +69,7 @@ export function createApplication(
   return db.transaction((tx) => insertApplication(tx, input, now, id, null));
 }
 
-/**
- * Intake: application (SUBMITTED) + creation audit row + documents + an
- * `extract` job, all in one transaction. Either everything is persisted or
- * nothing is, so the worker never sees an application without its job.
- */
+/** Application, documents and the extract job commit together, so the worker never sees an application without its job. */
 export function submitApplication(
   db: Db,
   input: NewApplicationInput,
@@ -99,7 +90,6 @@ export function submitApplication(
           })
           .run();
       }
-      // Informational: never blocks submission (approve holds while it is open).
       flagDuplicates(tx, app, now);
       enqueueJob(tx, 'extract', { application_id: id }, { now });
       return app;
@@ -110,26 +100,21 @@ export function submitApplication(
 
 const WIRE_NAMES: Record<string, string> = { merchantName: 'merchant_name', bankAccount: 'bank_account' };
 
-/** States in which the merchant can no longer edit the application. */
 const LOCKED_STATES: readonly ApplicationStatus[] = ['APPROVED', 'MERCHANT_CREATED', 'MERCHANT_CREATION_FAILED', 'REJECTED'];
 
 export interface ApplicationPatch extends Partial<NewApplicationInput> {
-  /** Structured documents; each replaces the existing document of its type. NEEDS_INFO only. */
+  /** Replaces the document of the same type. Only accepted in NEEDS_INFO. */
   documents?: NewDocumentInput[];
 }
 
-/** States in which BANK may already be verified or in flight: a bank change re-runs it. */
 const BANK_REVERIFY_STATES: readonly ApplicationStatus[] = ['VERIFYING', 'VERIFIED', 'IN_REVIEW'];
 
 /**
- * Bank details changed after verification started.
- * Bumps bank_version and supersedes every BANK row, so the approval guard
- * blocks until BANK passes for the new version and old-version callbacks are
- * STALE. Then re-runs BANK only:
- * - VERIFIED: -> IN_REVIEW (merchant, BANK_CHANGED, review task BANK_CHANGED)
- *   -> VERIFYING (system, BANK_REVERIFICATION_STARTED); evaluate() returns it
- *   to VERIFIED and auto-resolves the task.
- * - VERIFYING / IN_REVIEW: status unchanged, audit BANK_CHANGED.
+ * Bank details changed after verification started. Bumping bank_version and
+ * superseding the old BANK rows makes the approval guard wait for a fresh BANK
+ * pass and turns callbacks for the old account into STALE ones. Only BANK is
+ * re-run; from VERIFIED the application goes back through IN_REVIEW to
+ * VERIFYING, and evaluate() auto-resolves the BANK_CHANGED task once it passes.
  */
 function applyBankChange(tx: Tx, app: Application, changed: string[], now: number): Application {
   const from = app.bankVersion;
@@ -172,16 +157,10 @@ function applyBankChange(tx: Tx, app: Application, changed: string[], now: numbe
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /**
- * Merchant edits: form fields, plus documents while in NEEDS_INFO.
- *
- * - In NEEDS_INFO, any real change is the merchant supplying the requested
- *   info: NEEDS_INFO -> EXTRACTING (actor merchant, event INFO_SUPPLIED) and
- *   a new `extract` job, in the same transaction as the edit.
- * - A bank_account / ifsc change in VERIFYING, VERIFIED or IN_REVIEW goes
- *   through applyBankChange (version bump + BANK re-run).
- * - Elsewhere, persists the fields and writes APPLICATION_UPDATED; status is
- *   untouched.
- * Audit details name the changed fields / document types, never values.
+ * Merchant edits. In NEEDS_INFO any real change restarts extraction in the
+ * same transaction; a bank change after verification goes through
+ * applyBankChange; otherwise the fields are saved and audited. Audit details
+ * name the changed fields, never their values.
  */
 export function updateApplication(
   db: Db,

@@ -1,14 +1,6 @@
 /*
- * Generates the sample document files in sample-data/:
- *   pan-sharp.png   a clean, synthetic PAN card (OCR-readable)
- *   pan-blurry.png  the same card with a Gaussian blur (fails the blur check)
- *   gst-cert.pdf    a text-layer GST certificate (pdf-parse, no OCR)
- *   bank-proof.pdf  a text-layer bank letter
- *   missing-gst-cert.pdf  the GST certificate missing.json lacks (upload it
- *                   in the "Information needed" panel to complete that app)
- *
- * The card is fake: it uses the identity of sample-data/ocr-pan.json, not a
- * real person or company. Run from the repo root:
+ * Writes the synthetic sample documents in sample-data/ (fictitious
+ * identities, marked "SAMPLE DOCUMENT - NOT VALID"). Output is deterministic.
  *   npx tsx scripts/generate-sample-images.mts
  */
 import { mkdirSync, writeFileSync } from 'node:fs';

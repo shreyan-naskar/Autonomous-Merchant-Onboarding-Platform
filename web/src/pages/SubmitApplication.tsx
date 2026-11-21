@@ -17,7 +17,6 @@ import { useToast } from '../components/toast.tsx'
 import { Alert, Button, Card, ErrorAlert, Input, PageHeader, Textarea, cx } from '../components/ui.tsx'
 import { api, fieldErrors } from '../lib/api.ts'
 
-/** sample-data/*.json, bundled at build time. */
 const SAMPLES: Record<string, Record<string, unknown>> = Object.fromEntries(
   Object.entries(import.meta.glob('../../../sample-data/*.json', { eager: true, import: 'default' })).map(([path, body]) => [
     path.split('/').pop()!,
@@ -25,7 +24,6 @@ const SAMPLES: Record<string, Record<string, unknown>> = Object.fromEntries(
   ]),
 )
 
-/** What each sample demonstrates, in plain words (unknown samples still load, without a description). */
 const SAMPLE_INFO: Record<string, { title: string; text: string }> = {
   'happy.json': { title: 'Everything in order', text: 'Passes every check and gets a merchant ID in seconds.' },
   'gst-fail.json': { title: 'GST check fails', text: 'PAN passes, the GST provider rejects it: goes to review.' },
@@ -46,7 +44,7 @@ const FIELDS = [
 type FieldKey = (typeof FIELDS)[number]['key']
 const EMPTY: Record<FieldKey, string> = { merchant_name: '', pan: '', gst: '', bank_account: '', ifsc: '' }
 
-/** Same rules as the API (shared validators), checked as the merchant types. Empty optional fields are fine here. */
+/** The API's own format rules; empty optional fields are fine at this point. */
 function validate(key: FieldKey, raw: string): string | null {
   const v = key === 'bank_account' ? raw.trim() : raw.trim().toUpperCase()
   if (key === 'merchant_name') return raw.trim().length >= 2 ? null : 'Enter the business name (at least 2 characters)'
@@ -68,12 +66,6 @@ interface StructuredDoc {
 
 const STEPS = ['Business details', 'Documents', 'Review and submit'] as const
 
-/**
- * Submit a merchant application in three steps. Inline validation uses the
- * same format rules as the API; the API's own 400 details are mapped back
- * onto the fields. Files and structured (JSON) documents can be mixed; a file
- * replaces the structured document of the same type.
- */
 export function SubmitApplication() {
   const navigate = useNavigate()
   const qc = useQueryClient()

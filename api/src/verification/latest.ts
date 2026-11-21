@@ -4,12 +4,7 @@ import type { Db } from '../db/client.js';
 import { verifications, type Application, type Verification } from '../db/schema.js';
 import type { Tx } from '../domain/guards.js';
 
-/**
- * The verification row that currently counts for `kind`: the newest
- * non-superseded attempt, and for BANK only one run against the
- * application's current bank_version. Used by evaluate(), the approval
- * guard and start_verifications, so all three agree on what "the" result is.
- */
+/** One definition of "the" result, shared by evaluate(), the approval guard and start_verifications. BANK must match the current bank_version. */
 export function currentVerification(
   db: Db | Tx,
   app: Pick<Application, 'id' | 'bankVersion'>,

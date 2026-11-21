@@ -1,15 +1,8 @@
 import { z } from 'zod';
 import { DocumentTypeSchema } from './intake.js';
 
-/*
- * What the merchant is asked to supply while an application is in NEEDS_INFO
- * (missing information; exceptions go to a human reviewer instead). The API
- * writes this as the detail of the INFO_REQUIRED audit entry; the web panel
- * renders the messages and offers an input for each form field and a file
- * upload for each document listed.
- */
+/* What the merchant is asked to supply in NEEDS_INFO: the INFO_REQUIRED audit detail, rendered by the web panel. */
 
-/** Form fields the merchant can edit (wire names). */
 export const MERCHANT_FORM_FIELDS = ['merchant_name', 'pan', 'gst', 'bank_account', 'ifsc'] as const;
 export const MerchantFormFieldSchema = z.enum(MERCHANT_FORM_FIELDS);
 export type MerchantFormField = z.infer<typeof MerchantFormFieldSchema>;
@@ -39,14 +32,11 @@ export const MerchantRequestSchema = z.object({
 });
 export type MerchantRequest = z.infer<typeof MerchantRequestSchema>;
 
-/** Detail of the INFO_REQUIRED audit entry (extraction found something missing). */
 export const InfoRequestDetailSchema = z.object({
   reason: z.literal('MISSING_INFO'),
   missing: z.array(z.string()),
   requests: z.array(MerchantRequestSchema),
-  /** Form fields to offer as inputs. */
   form_fields: z.array(MerchantFormFieldSchema),
-  /** Documents to offer an upload for. */
   documents: z.array(DocumentTypeSchema),
 });
 export type InfoRequestDetail = z.infer<typeof InfoRequestDetailSchema>;

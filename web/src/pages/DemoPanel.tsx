@@ -7,19 +7,17 @@ import { Button, Card, Dialog, ErrorAlert, Input, PageHeader, SkeletonRows, Swit
 import { api, mockApi } from '../lib/api.ts'
 import { qk, useChaos, useMerchantService } from '../lib/queries.ts'
 
-/** Late callbacks arrive after this delay: longer than the API's 30s demo timeout, so the API times out and retries first. */
+/** Longer than the API's 30s demo timeout, so the API times out and retries first. */
 export const LATE_MS = 45_000
 
 export interface ChaosMode {
   key: string
   label: string
-  /** What switching it on demonstrates (one line, for the audience). */
   demonstrates: string
   on: boolean
   set: (on: boolean) => void
 }
 
-/** The demo switches, shared with the "active chaos" banner. */
 export function useChaosModes(): { modes: ChaosMode[]; loading: boolean; busy: boolean; error: unknown; resetAll: () => void } {
   const qc = useQueryClient()
   const chaos = useChaos()
@@ -95,7 +93,6 @@ export function useChaosModes(): { modes: ChaosMode[]; loading: boolean; busy: b
   }
 }
 
-/** Demo controls: chaos switches for the mock providers and the merchant ID service, callback delay, reset, delete all data. */
 export function DemoPanel() {
   const qc = useQueryClient()
   const toast = useToast()

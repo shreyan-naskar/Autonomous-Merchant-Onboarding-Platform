@@ -13,35 +13,21 @@ export interface VerificationDeps {
   db: Db;
   logger: Logger;
   config: Config;
-  /** Clock value (epoch ms) for this unit of work. */
   now: number;
 }
 
 export interface StartResult {
-  /** Rows a provider accepted in this run. */
   requested: Verification[];
-  /** Kinds skipped because a check is already in flight or complete. */
   skipped: VerificationKind[];
 }
 
-/**
- * Requests are made in VERIFYING. A bank-change re-run (payload carries the
- * bank_version it was enqueued for) may also run in IN_REVIEW, and is
- * skipped once a newer bank change has bumped the version again.
- */
+/** A bank-change re-run may also run in IN_REVIEW, and is skipped once a newer bank change bumped the version. */
 function canRequest(app: Application, bankVersion?: number): boolean {
   if (bankVersion === undefined) return app.status === 'VERIFYING';
   return bankVersion === app.bankVersion && (app.status === 'VERIFYING' || app.status === 'IN_REVIEW');
 }
 
-/**
- * Decide which kinds need a provider request and reserve a PENDING row for
- * each (one transaction). A kind needs a request when it has no current row
- * (first run, or the old one was superseded / is for an old bank_version) or
- * its current row TIMED_OUT (a retry: attempt + 1). A PENDING row without a
- * request_id is left over from a failed run and is reused, so retrying this
- * job never creates duplicate rows.
- */
+/** A PENDING row without a request_id is left over from a failed run and is reused, so retries never duplicate rows. */
 function reserveRows(db: Db, appId: string, kinds: readonly VerificationKind[], now: number, bankVersion?: number) {
   return db.transaction(
     (tx) => {
@@ -79,11 +65,6 @@ function reserveRows(db: Db, appId: string, kinds: readonly VerificationKind[], 
   );
 }
 
-/**
- * Record an accepted request: store the request_id, schedule the
- * verification_timeout job and audit VERIFICATION_REQUESTED, atomically,
- * then apply any callback for this request that arrived before the id was known.
- */
 function recordRequested(deps: VerificationDeps, app: Application, row: Verification, requestId: string): Verification {
   const { db, config, now } = deps;
   return db.transaction(
@@ -114,7 +95,6 @@ function recordRequested(deps: VerificationDeps, app: Application, row: Verifica
           detail: { kind: row.kind, attempt: row.attempt, request_id: requestId, bank_version: row.bankVersion },
         })
         .run();
-      // A fast provider may have called back before we stored the id.
       applyEarlyCallbacks(tx, requestId, now);
       return updated;
     },
@@ -122,12 +102,7 @@ function recordRequested(deps: VerificationDeps, app: Application, row: Verifica
   );
 }
 
-/**
- * The `start_verifications` job: request the given checks (default: all
- * required) for an application in VERIFYING (see canRequest for bank re-runs). Provider calls happen outside
- * any DB transaction. If any call fails the job throws after the others are
- * recorded, so the worker retries only what is still missing.
- */
+/** Provider calls happen outside any DB transaction. If one fails the job throws after recording the others, so a retry only requests what is missing. */
 export async function runStartVerifications(
   deps: VerificationDeps,
   providers: ProviderClient,

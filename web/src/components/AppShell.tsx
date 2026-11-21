@@ -36,11 +36,6 @@ const readCollapsed = () => {
   }
 }
 
-/**
- * App shell: grouped sidebar (collapsible on desktop, a drawer on mobile),
- * top bar (page title, global search, API health) and the page.
- * `banners` render under the top bar on every page.
- */
 export function AppShell({ children, banners }: { children: ReactNode; banners?: ReactNode }) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [drawer, setDrawer] = useState(false)
@@ -81,7 +76,6 @@ export function AppShell({ children, banners }: { children: ReactNode; banners?:
         Skip to content
       </a>
 
-      {/* Mobile drawer backdrop */}
       {drawer && <div className="fixed inset-0 z-40 bg-neutral-900/40 lg:hidden" aria-hidden onClick={() => setDrawer(false)} />}
 
       <aside
@@ -215,7 +209,6 @@ function HealthDot() {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Search applications by merchant name or application ID; arrow keys + Enter to open, "/" to focus. */
 function GlobalSearch() {
   const apps = useApplications()
   const navigate = useNavigate()

@@ -20,20 +20,13 @@ import { Button, ErrorAlert, Input, Textarea } from './ui.tsx'
 type Request = { message: string; operatorNote?: string }
 
 interface WhatToFix {
-  /** Plain-language items to show. */
   requests: Request[]
   formFields: MerchantFormField[]
   documents: DocumentType[]
-  /** Operator asked (REQUEST_INFO): no system list, so everything is offered. */
+  /** A reviewer's request carries a note, not a list, so everything is offered. */
   byOperator: boolean
 }
 
-/**
- * What the merchant is asked to supply: the detail of the audit entry that moved
- * the application into NEEDS_INFO. System requests carry messages and the
- * fields / documents to offer (InfoRequestDetail); an operator's request
- * carries a note, and then every field and document is offered.
- */
 function whatToFix(app: ApplicationDetailDto): WhatToFix {
   const entry = [...app.audit_log].reverse().find((a) => a.to_state === 'NEEDS_INFO')
   if (entry?.event === 'OPERATOR_REQUESTED_INFO') {
@@ -60,7 +53,6 @@ function whatToFix(app: ApplicationDetailDto): WhatToFix {
   return {
     requests: missing.map((m) => ({ message: m })),
     formFields: missing.filter((m) => m.startsWith('form.')).map((m) => m.slice(5) as MerchantFormField),
-    // document.GST_CERT -> GST_CERT; PAN_CARD.pan -> PAN_CARD
     documents: [
       ...new Set(
         missing.flatMap((m) => (m.startsWith('form.') ? [] : [(m.startsWith('document.') ? m.slice(9) : m.split('.')[0]) as DocumentType])),
@@ -70,7 +62,6 @@ function whatToFix(app: ApplicationDetailDto): WhatToFix {
   }
 }
 
-/** Current value hint for an input (the API masks PAN / GSTIN / account). */
 function current(app: ApplicationDetailDto, f: MerchantFormField): string | null {
   const v = { merchant_name: app.merchant_name, pan: app.pan, gst: app.gst, bank_account: app.bank_account, ifsc: app.ifsc }[f]
   return v ?? null
@@ -78,13 +69,6 @@ function current(app: ApplicationDetailDto, f: MerchantFormField): string | null
 
 const EXAMPLE = '[{"type": "GST_CERT", "payload": {"gstin": "…", "legal_name": "…"}}]'
 
-/**
- * Shown while the application is in NEEDS_INFO: what to supply, in plain
- * language, with an input for each requested form field and an upload for
- * each requested document. Everything else is under "Other changes".
- * Sends one multipart PATCH; any real change moves the application back to
- * extraction (NEEDS_INFO -> EXTRACTING).
- */
 export function MissingInfoPanel({ app }: { app: ApplicationDetailDto }) {
   const qc = useQueryClient()
   const toast = useToast()

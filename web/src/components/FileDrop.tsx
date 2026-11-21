@@ -8,11 +8,7 @@ const ALLOWED = ['application/pdf', 'image/png', 'image/jpeg']
 
 const size = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
-/**
- * One document upload: drag and drop or click (a real file input underneath,
- * so it is keyboard and screen-reader friendly). Shows the chosen file as a
- * chip with a preview for images, and checks type and size before upload.
- */
+/** A real file input underneath, so it stays keyboard and screen-reader friendly. */
 export function FileDrop({
   label,
   hint,

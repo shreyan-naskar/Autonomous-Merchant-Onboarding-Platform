@@ -5,14 +5,8 @@ import { duration } from '../lib/format.ts'
 import { useMetrics } from '../lib/queries.ts'
 import { Skeleton, StatCard, Tooltip, TONE_SOFT, cx } from './ui.tsx'
 
-/** Stages whose average duration says something about throughput. */
 const TIMED: readonly ApplicationStatus[] = ['EXTRACTING', 'VERIFYING', 'IN_REVIEW', 'NEEDS_INFO', 'APPROVED']
 
-/**
- * Operational metrics from GET /metrics (computed by the API from the audit
- * log): totals, exception rate, average time per stage, and how many
- * applications are in each state right now. Shown on the Applications page.
- */
 export function MetricsStrip() {
   const { data, isPending, isError } = useMetrics()
   if (isPending) {

@@ -7,18 +7,12 @@ import type { Logger } from '../../logger.js';
 import { toDeadJobDto } from '../dto.js';
 
 const ListQuerySchema = z.object({
-  // Only the dead-letter view is exposed.
   status: z.literal('dead').default('dead'),
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 const IdSchema = z.coerce.number().int().positive();
 
-/**
- * Dead-letter view (no auth, like the rest of the demo API):
- * - `GET /jobs?status=dead` dead jobs, newest first, payloads masked.
- * - `POST /jobs/:id/requeue {note}` dead -> queued with attempts reset (409 if
- *   not dead). The note is required, like every operator action.
- */
+/** Only dead jobs are exposed. Requeueing needs a note, like every operator action. */
 export function jobsRouter({ db, logger, now }: { db: Db; logger: Logger; now: () => number }): Router {
   const router = Router();
   router.get('/', (req, res) => {

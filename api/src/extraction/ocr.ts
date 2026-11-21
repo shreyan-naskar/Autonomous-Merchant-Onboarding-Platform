@@ -2,39 +2,25 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Worker } from 'tesseract.js';
 
-/** One recognized word and its confidence (0-1). */
 export interface OcrWord {
   text: string;
   confidence: number;
 }
 
-/**
- * OCR result: full text, the engine's mean confidence over the whole page
- * (0-1), and per-word confidences. The page mean is dragged down by
- * everything else on a real card (Hindi text, hologram, photo, signature),
- * so field confidence is taken from the words of each value (read.ts).
- */
+/** Per-word confidences matter: on a real card the page mean is dragged down by Hindi text, the hologram and the photo. */
 export interface OcrResult {
   text: string;
   confidence: number;
   words?: OcrWord[];
 }
 
-/**
- * OCR behind an interface so the extract job is testable without Tesseract
- * (tests pass a fake; one test runs the real engine on the sample image).
- * Only the extract job calls this, never a request handler.
- */
+/** An interface so tests run without Tesseract. Only the extract job calls it, never a request handler. */
 export interface OcrEngine {
   recognize(image: Buffer): Promise<OcrResult>;
   terminate(): Promise<void>;
 }
 
-/**
- * tesseract.js engine. The worker (and the English model, downloaded once
- * into `cacheDir`) is created on first use, so startup and tests that never
- * OCR pay nothing. The worker runs recognitions one at a time.
- */
+/** Created on first use (the English model is downloaded once into cacheDir), so nothing pays for OCR until it is needed. */
 export function createTesseractOcr({ cacheDir }: { cacheDir: string }): OcrEngine {
   let worker: Promise<Worker> | undefined;
   const getWorker = () => {

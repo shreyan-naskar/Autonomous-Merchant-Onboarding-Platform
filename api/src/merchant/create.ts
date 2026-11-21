@@ -9,17 +9,10 @@ import type { MerchantService } from './service.js';
 export type CreateMerchantOutcome = 'created' | 'failed' | 'skipped';
 
 /**
- * The `create_merchant` job (enqueued on every move into APPROVED).
- *
- * - Not APPROVED (already created, failed, ...): no-op.
- * - Asks the merchant service for an ID. The service is idempotent per
- *   application, and an ID already stored on the application is reused
- *   without calling it, so a retry or a duplicate job never creates a second MID.
- * - Service failure with attempts left: throw, so the worker retries with
- *   backoff (audit JOB_FAILED each time).
- * - Service failure on the last attempt: APPROVED -> MERCHANT_CREATION_FAILED
- *   plus a review task, and the job completes (no JOB_DEAD task on top).
- * - Success: store merchant_id and APPROVED -> MERCHANT_CREATED, one transaction.
+ * A retry or a duplicate job never creates a second merchant ID: a stored ID is
+ * reused and the service is idempotent per application. On the last failed
+ * attempt the application goes to MERCHANT_CREATION_FAILED (with a review task)
+ * instead of dead-lettering the job.
  */
 export async function runCreateMerchant(
   deps: VerificationDeps & { job: Pick<JobRow, 'attempts' | 'maxAttempts'> },

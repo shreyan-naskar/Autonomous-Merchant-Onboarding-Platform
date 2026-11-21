@@ -1,14 +1,6 @@
 import { reportReachable } from './connection.ts'
 
-/**
- * Thin fetch wrappers. The browser calls Vite's proxy: `/api` -> API (:3000),
- * `/mock` -> mock providers (:4000).
- *
- * All error handling is centralized here: every failure is an ApiError with a
- * `kind` (network / validation / not_found / conflict / server / client).
- * Pages never match on message strings: they use `kind`, `fieldErrors()` and
- * `friendlyError()`.
- */
+/** Every failure becomes an ApiError with a `kind`; pages use kind, fieldErrors() and friendlyError(), never message strings. */
 
 export type ApiErrorKind = 'network' | 'validation' | 'not_found' | 'conflict' | 'server' | 'client'
 
@@ -82,7 +74,6 @@ export const api = {
   get: <T>(path: string) => request<T>('/api', path),
   post: <T>(path: string, json?: unknown) => request<T>('/api', path, { method: 'POST', json }),
   patch: <T>(path: string, json: unknown) => request<T>('/api', path, { method: 'PATCH', json }),
-  /** multipart/form-data (the browser sets the boundary header). */
   postForm: <T>(path: string, form: FormData) => request<T>('/api', path, { method: 'POST', body: form }),
   patchForm: <T>(path: string, form: FormData) => request<T>('/api', path, { method: 'PATCH', body: form }),
 }
@@ -92,10 +83,6 @@ export const mockApi = {
   post: <T>(path: string, json?: unknown) => request<T>('/mock', path, { method: 'POST', json }),
 }
 
-/**
- * 400 validation details mapped onto form fields: `{pan: "PAN must be ..."}`.
- * Nested paths keep their dotted form (`documents.0.type`).
- */
 export function fieldErrors(error: unknown): Record<string, string> {
   if (!isApiError(error) || error.kind !== 'validation' || !Array.isArray(error.details)) return {}
   const out: Record<string, string> = {}
@@ -120,7 +107,6 @@ export interface FriendlyError {
   raw?: string
 }
 
-/** Any error in words for a non-technical audience. API messages are already masked. */
 export function friendlyError(error: unknown): FriendlyError {
   if (!isApiError(error)) {
     return { title: 'Something went wrong', message: error instanceof Error ? error.message : String(error) }
@@ -164,6 +150,3 @@ export function friendlyError(error: unknown): FriendlyError {
 }
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
-
-/** Back-compat for older call sites. */
-export const errorMessage = (err: unknown) => friendlyError(err).message

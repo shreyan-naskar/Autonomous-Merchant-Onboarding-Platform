@@ -1,9 +1,4 @@
-/*
- * Design system primitives ("Ledger"). Tokens live in index.css (@theme);
- * components use only token colors (accent, success, warning, danger, info,
- * neutral). Status is never shown by color alone: every tone comes with an
- * icon and text.
- */
+/* Design-system primitives. Only token colors (index.css); status is never shown by color alone. */
 import { AlertTriangle, Check, CheckCircle2, ChevronRight, Copy, Info, Loader2, X, XCircle, type LucideIcon } from 'lucide-react'
 import {
   useEffect,
@@ -26,7 +21,6 @@ export type Tone = 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'neutr
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
 
-/** Background + text + ring per tone, for badges and soft surfaces. */
 export const TONE_SOFT: Record<Tone, string> = {
   accent: 'bg-accent-50 text-accent-800 ring-accent-200',
   success: 'bg-success-50 text-success-800 ring-success-200',
@@ -52,8 +46,6 @@ const TONE_ICON: Record<Tone, LucideIcon> = {
   neutral: Info,
 }
 
-// ---------------------------------------------------------------------------
-// Buttons
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
 const BUTTON: Record<ButtonVariant, string> = {
@@ -94,8 +86,6 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
   return <Loader2 role="status" aria-label={label} className="size-4 animate-spin text-neutral-400" />
 }
 
-// ---------------------------------------------------------------------------
-// Form fields: label, hint and error text wired with aria attributes.
 
 interface FieldChrome {
   label: ReactNode
@@ -193,7 +183,6 @@ export function Select({ label, hint, error, hideLabel, required, id, className,
   )
 }
 
-/** Accessible on/off switch with a label and a one-line explanation. */
 export function Switch({ checked, onChange, label, description, disabled }: { checked: boolean; onChange: (on: boolean) => void; label: string; description?: ReactNode; disabled?: boolean }) {
   const id = useId()
   return (
@@ -228,8 +217,6 @@ export function Switch({ checked, onChange, label, description, disabled }: { ch
   )
 }
 
-// ---------------------------------------------------------------------------
-// Surfaces
 
 export function Card({
   title,
@@ -287,7 +274,6 @@ export function Alert({ tone = 'info', title, children, action }: { tone?: Tone;
   )
 }
 
-/** An error from a mutation or query, in friendly words (the API's message for 4xx). */
 export function ErrorAlert({ error, title }: { error: unknown; title?: string }) {
   if (!error) return null
   const f = friendlyError(error)
@@ -322,8 +308,6 @@ export function StatCard({ label, value, hint, icon: Icon, tone = 'neutral' }: {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Loading and empty states
 
 export function Skeleton({ className }: { className?: string }) {
   return <div aria-hidden className={cx('animate-pulse rounded-md bg-neutral-200/70', className)} />
@@ -356,8 +340,6 @@ export function EmptyState({ icon: Icon, title, text, action }: { icon: LucideIc
   )
 }
 
-// ---------------------------------------------------------------------------
-// Tooltip: shown on hover and keyboard focus; the trigger is described by it.
 
 export function Tooltip({ content, children, side = 'top', className }: { content: ReactNode; children: ReactNode; side?: 'top' | 'bottom'; className?: string }) {
   const id = useId()
@@ -400,8 +382,6 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
   )
 }
 
-// ---------------------------------------------------------------------------
-// Tabs (WAI-ARIA tabs pattern: arrow keys move between tabs)
 
 export interface TabDef<T extends string> {
   id: T
@@ -458,8 +438,6 @@ export function TabPanel({ id, children }: { id: string; children: ReactNode }) 
   )
 }
 
-// ---------------------------------------------------------------------------
-// Dialog: modal, Esc closes, focus is trapped inside and restored on close.
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
@@ -548,8 +526,6 @@ export function Dialog({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Page header: title, subtitle, actions, breadcrumbs; sets the document title.
 
 export interface Crumb {
   label: string

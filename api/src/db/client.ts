@@ -10,10 +10,7 @@ export type Db = BetterSQLite3Database<typeof schema> & { $client: Database.Data
 
 export const MIGRATIONS_DIR = fileURLToPath(new URL('../../drizzle', import.meta.url));
 
-/**
- * Open a SQLite database and bring it to the latest schema. Use ':memory:'
- * in tests for an isolated, fully migrated database.
- */
+/** Migrates on open, so ':memory:' gives each test a fresh, fully migrated database. */
 export function openDb(path: string, { runMigrations = true } = {}): Db {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const sqlite = new Database(path);

@@ -66,11 +66,7 @@ afterEach(async () => {
   db.$client.close();
 });
 
-/**
- * Run queued jobs at their run_at (fake clock) that fall due within `horizon`
- * ms: enough for job backoff retries (1s, 2s), not for the 30s verification
- * timeouts, which these tests never want to fire.
- */
+/** The default horizon covers backoff retries but not the 30s verification timeouts, which these tests never want. */
 async function drain(horizon = 5_000) {
   const until = clock + horizon;
   for (let i = 0; i < 100; i++) {

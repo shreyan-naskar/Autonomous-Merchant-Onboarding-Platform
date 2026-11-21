@@ -11,11 +11,7 @@ import { useApplications } from '../lib/queries.ts'
 
 type SortKey = 'submitted' | 'time_in_state'
 
-/**
- * Every application, filterable by status chips, "needs attention" and a
- * search; sortable by time in state or submission time. Filters live in the
- * URL so they survive reloads and can be shared.
- */
+/** Filters live in the URL so they survive reloads and can be shared. */
 export function ApplicationList() {
   const [params, setParams] = useSearchParams()
   const status = params.get('status') as ApplicationStatus | null

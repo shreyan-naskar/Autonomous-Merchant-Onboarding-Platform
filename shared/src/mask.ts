@@ -1,7 +1,4 @@
-/**
- * Mask a sensitive value, keeping only the last 4 characters visible.
- * Values of 4 characters or fewer are fully masked so nothing leaks.
- */
+/** Last 4 characters only; shorter values are fully masked. */
 export function mask(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const s = String(value);
@@ -13,22 +10,14 @@ export function mask(value: string | null | undefined): string | null {
 const PAN_LIKE = /[A-Z]{5}[0-9]{4}[A-Z]/g;
 const ACCOUNT_LIKE = /\b\d{9,18}\b/g;
 
-/**
- * Best-effort scrubbing of free text (error messages, notes) that might contain
- * a raw PAN or bank account number. Used as a last line of defence in logs and
- * error responses; structured fields should use mask() directly.
- */
+/** Last line of defence for free text (errors, notes, URL paths) in logs and responses. Structured fields use mask(). */
 export function redactText(text: string): string {
   return text
     .replace(PAN_LIKE, (m) => mask(m) as string)
     .replace(ACCOUNT_LIKE, (m) => mask(m) as string);
 }
 
-/**
- * Keys whose values are sensitive wherever they appear (form fields, document
- * payloads, provider results). A GSTIN embeds the PAN, so GST keys count too.
- * Shared by the API response mapper and the log redactor.
- */
+/** Sensitive wherever they appear. A GSTIN embeds the PAN, so GST keys count. Shared by the response mapper and the log redactor. */
 export const SENSITIVE_KEYS = [
   'pan',
   'gst',
@@ -46,11 +35,7 @@ export function isSensitiveKey(key: string): boolean {
   return SENSITIVE.has(key);
 }
 
-/**
- * Deep-copy free-form JSON (document payloads, audit details) for display:
- * values under SENSITIVE_KEYS are mask()ed, other strings go through
- * redactText(), except id-like keys (a UUID's last group can be all digits).
- */
+/** Id-like keys are skipped: a UUID's last group can be all digits and would look like an account number. */
 export function maskDeep(value: unknown, key?: string): unknown {
   if (key !== undefined && SENSITIVE.has(key)) {
     if (value === null || value === undefined) return value ?? null;
