@@ -12,6 +12,18 @@ trails (about 10 seconds).
 Every requirement and scenario of the brief, one by one, with how to show it
 in the website: [REQUIREMENTS.md](REQUIREMENTS.md).
 
+## The website at a glance
+
+- **Left sidebar**: *Operations* (Applications, Review queue with an open-task
+  count), *Merchant* (Submit application), *Admin* (Dead letters with a count,
+  Demo controls). On a phone it opens from the menu button.
+- **Top bar**: page title, a search box (merchant name or application ID;
+  press `/` to jump to it) and a dot that is green while the API answers.
+- **Banners** under the top bar: amber while any demo failure mode is on (with
+  *Turn all off*), red if the server can't be reached.
+- Every status and reason is shown in plain words with an icon; hover (or
+  focus) a badge to see the underlying code.
+
 ## Before the audience arrives
 
 ```sh
@@ -21,29 +33,32 @@ npm test                    # expect: all passed
 npm run dev                 # API :3000, mock providers :4000, web :5173
 ```
 
-In a second terminal, start from an empty database with default chaos settings:
+Open <http://localhost:5173> -> **Demo controls** -> **Delete all data** ->
+**Delete everything** (deletes every application and resets the switches).
+The **Applications** page now says "No applications yet".
 
-```sh
-curl -s -X POST localhost:3000/admin/reset-data   # demo mode only: deletes all applications
-curl -s -X POST localhost:4000/admin/reset
-sudo dnf install -y jq                            # only needed for the curl fallbacks below
-```
-
-Open <http://localhost:5173>. The metrics strip at the top should read 0 applications.
+Fallback: `curl -s -X POST localhost:3000/admin/reset-data; curl -s -X POST localhost:4000/admin/reset`
+(and `sudo dnf install -y jq` for the curl fallbacks below).
 
 Optional rehearsal: `npm run demo -- --external` resets and uses the running
-services, but leaves 2 applications behind. Run the two reset commands again
-afterwards.
+services, but leaves 2 applications behind. Delete all data again afterwards.
 
-## 1. Submit `happy.json`, show extraction and VERIFYING
+## 1. Submit `happy.json`, show extraction and verification starting
 
-1. Click **Demo controls** and turn on **Duplicate callback**. This sets up step 2: each provider will send its callback twice.
-2. Click **Submit**. In **Load sample**, choose `happy.json`. The form and the JSON documents fill in.
-3. Click **Submit application**. The browser opens the application's detail page.
+1. **Demo controls** -> turn on **Duplicate callback** (the switch turns red;
+   an amber banner appears on every page). This sets up step 2.
+2. **Submit application** -> under *Start from a sample*, click **Everything
+   in order** (`happy.json`). The business details fill in.
+3. **Continue** (step 2 shows the three documents as "Structured data from the
+   sample") -> **Continue** -> **Submit application**. A toast says
+   "Application submitted" and the application's page opens.
 4. Point at:
-   - The header: PAN `******234K`, GSTIN `***********K1Z5`, account `**********7891`. Everything sensitive is masked by the API, not the UI.
-   - **Extracted fields**: 7 fields, confidence 1.0, all `ok`. The GSTIN embeds the PAN, and the names on all three documents match the form.
-   - **Timeline**: `SUBMITTED -> EXTRACTING -> VERIFYING`, then four `VERIFICATION_REQUESTED` rows.
+   - The header: PAN `******234K`, GSTIN `***********K1Z5`. Everything
+     sensitive is masked by the API, not the UI.
+   - The progress stepper: Submitted -> Extracting -> Verifying.
+   - **Extracted fields** (Overview tab): 7 fields at 100% confidence, all
+     **OK**. The GSTIN contains the PAN, and the names on all three documents
+     match the form.
 
 Fallback:
 ```sh
@@ -52,12 +67,18 @@ ID=$(curl -s -X POST localhost:3000/applications -H 'content-type: application/j
 curl -s localhost:3000/applications/$ID | jq '{status, pan, extracted_fields: [.extracted_fields[] | {field, value, confidence, validation_status}]}'
 ```
 
-## 2. Async callbacks arrive; a duplicate callback is ignored
+## 2. Asynchronous answers arrive; a duplicate answer is ignored
 
-1. Stay on the detail page (it refreshes every 3s). After about 1.5s, the four **Verifications** cards turn green one after another: PAN, GST, BANK, RISK `PASSED`, with RISK showing its score.
-2. Each card shows a purple **duplicate ignored ×1** marker. The provider sent every callback twice with the same `event_id`. The API stored the second copy, flagged it as a duplicate, answered 200 and did nothing else.
-3. In the **Timeline**, there are exactly four `VERIFICATION_RESULT` rows (not eight) and one `ALL_CHECKS_PASSED`.
-4. Go back to **Demo controls** and turn **Duplicate callback** off.
+1. Stay on the page (it refreshes every 3 s). After about 1.5 s the four
+   **Verification checks** cards turn green: PAN, GST, Bank account, Risk
+   **Passed** (Risk shows its score).
+2. Each card shows a blue **Duplicate ignored ×1** marker: every provider sent
+   its answer twice with the same event ID; the API recorded the copy and did
+   nothing else.
+3. **Timeline** tab: four "Provider answered" rows (one per check, each with
+   **Passed**), not eight, and one "All checks passed".
+4. Click **Turn all off** in the amber banner (or switch **Duplicate callback**
+   off in Demo controls).
 
 Fallback (a single, deliberate redelivery of one already-delivered callback):
 ```sh
@@ -67,12 +88,19 @@ curl -s -X POST localhost:4000/admin/redeliver -H 'content-type: application/jso
 curl -s localhost:3000/applications/$ID | jq '[.callbacks[] | {kind, is_duplicate, note}]'
 ```
 
-## 3. VERIFIED -> APPROVED -> MERCHANT_CREATED with a merchant ID; the audit trail
+## 3. Verified -> Approved -> Merchant created; the audit trail
 
-1. Within about a second of the last callback, the status badge goes `VERIFIED`, then `APPROVED` (auto-approved: all four checks passed and risk is at most 70), then `MERCHANT_CREATED`.
-2. The header shows **Merchant ID** `MID-XXXXXXXX`.
-3. Walk the **Timeline** top to bottom. Each row has an actor (merchant, system, provider), a `from -> to` transition and an event. Expand `AUTO_APPROVED` to show the risk score and threshold, and `MERCHANT_CREATED` to show the merchant ID.
-4. Mention that only `transition()` can write a status, and that every approval passes a guard that re-checks all four results.
+1. Within about a second of the last answer the status goes **Verified**,
+   **Approved** (automatically: all four checks passed and risk is at most
+   70), then **Merchant created**. Each change pops a toast ("Status changed
+   to …") and the badge glows briefly; the stepper is all ticks.
+2. The header shows **Merchant ID** `MID-XXXXXXXX` with a copy button.
+3. **Timeline** tab, top to bottom: each row has an actor icon (merchant,
+   system, provider, reviewer), a plain-language event and the state change.
+   Expand **Details** on "Approved automatically" (risk score and threshold)
+   and "Merchant ID issued" (the merchant ID).
+4. Mention that only one function can change a status, and that every
+   approval re-checks all four results.
 
 Fallback:
 ```sh
@@ -80,15 +108,28 @@ curl -s localhost:3000/applications/$ID | jq '{status, merchant_id, trail: [.aud
 # or: npm run demo   (stop npm run dev first, or it will reset and reuse it)
 ```
 
-## 4. Exception path: `gst-fail.json` -> IN_REVIEW -> operator rejects
+## 4. Exception path: `gst-fail.json` -> In review -> reviewer rejects
 
-1. Click **Submit**, choose `gst-fail.json` in **Load sample** (its GSTIN ends in `Z9`, which the mock GST provider rejects), then click **Submit application**.
-2. On the detail page, within about 2s: PAN `PASSED`, GST `FAILED` (`GSTIN_INACTIVE`). The status becomes `IN_REVIEW` and **Review tasks** shows an open `PAN_OK_GST_FAILED` task. Its note lists each check with its result.
-3. Click **Review queue**. The task is listed with the merchant name and status. The buttons offered are only the actions valid in `IN_REVIEW`: Approve, Reject, Request info, Retry verification.
-4. Type a too-short note (`no`) and point out that the buttons stay disabled. The API also refuses notes under 5 characters (400).
-5. Type a note such as `GST registration inactive; rejecting.` and click **Reject**. The task disappears from the queue.
-6. Open the application. The status is `REJECTED`, and the timeline shows `IN_REVIEW -> REJECTED` by **operator**, with the note and task in the detail.
-   - Alternative: click **Request info** instead. The application goes to `NEEDS_INFO`, and the detail page shows the missing-info panel.
+1. **Submit application** -> sample **GST check fails** (`gst-fail.json`; its
+   GSTIN ends in `Z9`, which the mock GST provider rejects) -> **Continue** ->
+   **Continue** -> **Submit application**.
+2. Within about 2 s: PAN **Passed**, GST **Failed**; the status becomes
+   **In review** and the Overview tab shows a review task **"PAN verified, GST
+   verification failed"** whose note lists each check.
+3. **Review queue** (the sidebar badge shows 1): the task card with the
+   merchant, its status, its age and only the actions allowed now: Approve,
+   Reject, Request info, Retry verification.
+4. Click **Reject**. A dialog asks for a note: type `no` and point out that
+   **Reject** stays disabled and the counter reads "2 / 5 characters minimum"
+   (the API refuses short notes too).
+5. Type `GST registration inactive; rejecting.` and click **Reject**. Toast
+   "Application rejected"; the card disappears from the queue.
+6. Open the application (search for "Mysore" in the top bar): status
+   **Rejected**, the stepper shows a red "Rejected" branch, and the Timeline
+   has "Rejected by reviewer" (actor Reviewer) with the note in Details.
+   - Alternative: **Request info** instead sends it back to the merchant
+     (**Needs information**) and the page shows the "Information needed"
+     panel.
 
 Fallback:
 ```sh
@@ -104,15 +145,32 @@ curl -s -X POST localhost:3000/applications/$GID/review -H 'content-type: applic
 
 ## 5. (Time permitting) bank details change after verification blocks approval; metrics
 
-Happy applications auto-approve within a second, so use `high-risk.json`. Its merchant name contains `RISKY`, so it scores 85, passes every check and then waits in `IN_REVIEW` (`HIGH_RISK`).
+Happy applications approve within a second, so use `high-risk.json`: its
+checks pass but its risk score (85) holds it **In review** ("High risk score").
 
-1. **Submit** -> `high-risk.json` -> **Submit application**. Wait for `IN_REVIEW` with an open `HIGH_RISK` task (risk score 85 on the RISK card).
-2. Open **Demo controls**, set **Callback delay (ms)** to `15000` and press Tab. This gives you 15 seconds to try approving before the new bank check answers.
-3. Back on the detail page, under **Change bank details (merchant)**, enter account `60200111122223`, then click **Change bank details**. The header shows bank version 2. The old BANK card result is superseded, and a new BANK check is pending.
-4. In the `HIGH_RISK` task, type a note (`risk accepted after call`) and click **Approve**. You get a red 409: *"Cannot approve: BANK is pending for bank version 2. All of PAN, GST, BANK, RISK must pass first."* The task stays open.
-5. Wait for the BANK card to turn green for version 2 (up to 15s), then click **Approve** again. The status goes `APPROVED` -> `MERCHANT_CREATED`.
-6. Set **Callback delay** back to `1500` (or click **Reset all**).
-7. Point at the **metrics strip**: total applications, exception rate (the share of applications that ever needed a human), and average time in each state.
+1. **Submit application** -> sample **High risk** -> **Continue** ->
+   **Continue** -> **Submit application**. Wait for **In review** with the
+   "High risk score" task (Risk card: 85, marked high).
+2. **Demo controls** -> **Callback delay** -> Seconds `15` -> **Set**. This
+   gives you 15 seconds to try approving before the new bank check answers.
+3. Back on the application -> **Bank details** tab -> New account number
+   `60200111122223` -> **Change bank details**. Toast "Bank details updated";
+   the version goes to 2 and the bank check history shows the old result as
+   "(replaced)" and a new check waiting for the provider.
+4. **Overview** tab -> in the "High risk score" task click **Approve**, type
+   `risk accepted after call`, click **Approve**. The dialog shows **"Can't
+   approve yet"**: *"The bank account check for the new bank details is still
+   pending. All four checks (PAN, GST, bank, risk) must pass before approval."*
+   (hover **details** for the API's exact text). Click **Cancel**; the task
+   stays open.
+5. When the Bank account card turns green for version 2 (up to 15 s), click
+   **Approve** again with the note: toast "Application approved", then
+   **Merchant created**.
+6. **Demo controls** -> **Reset all** (restores the 1.5 s delay).
+7. **Applications**: the stat cards show totals, the exception rate (share of
+   applications that needed a person or more information), how many need
+   attention now, average time verifying, applications by status and average
+   time in each state.
 
 Fallback:
 ```sh
@@ -132,8 +190,26 @@ curl -s localhost:3000/metrics | jq
 
 ## Extras if there are questions
 
-- **Timeouts**: Demo controls -> **Drop callback (timeout)**, then submit a sample. Every check times out at 30s and is retried twice with backoff. After about 95s the application is `IN_REVIEW` with a `<KIND>_TIMEOUT` task. Turn the switch off afterwards.
-- **Dead letters**: Demo controls -> **Provider outage** on, submit `happy.json`, wait about 20s, then open **Dead letters**: a `start_verifications` job after 5 attempts with its 503 error. Turn the outage off, type a note and click **Requeue**: the application completes.
-- **Blurry document / OCR**: **Submit** -> load `ocr-pan.json` -> attach `sample-data/pan-blurry.png` as the PAN card -> `IN_REVIEW BLURRY_DOCUMENT` (blur score about 1.7 against a threshold of 30). With `pan-sharp.png`, OCR reads the PAN and name at about 0.94 confidence. The first OCR downloads the model, so do one rehearsal run.
-- **Duplicate application**: submit `happy.json` twice. The second gets a `POSSIBLE_DUPLICATE` task linking the first, and is held in `IN_REVIEW` instead of auto-approving.
+- **Timeouts**: Demo controls -> **Drop callback (timeout)**, then submit a
+  sample. Every check times out at 30 s and is retried twice with backoff;
+  after about 95 s the application is **In review** with "PAN check timed
+  out". Turn the switch off afterwards.
+- **Dead letters**: Demo controls -> **Provider outage** on, submit
+  `happy.json` (Delete all data first if it was submitted before), wait about
+  20 s, then **Dead letters** (sidebar badge): "Send checks to providers",
+  5/5 attempts, with its 503 error. Turn the outage off, click **Requeue**,
+  type a note, **Requeue**: the application completes.
+- **Blurry document / OCR**: **Submit application** -> sample **Upload a PAN
+  card** -> **Continue** -> drop `sample-data/pan-blurry.png` on **PAN card**
+  -> **Continue** -> **Submit application**: **In review**, "Document image too
+  blurry" (Documents tab: sharpness about 2, blurry). With `pan-sharp.png` OCR
+  reads the PAN and name at about 90% confidence. The first OCR downloads the
+  model, so do one rehearsal run.
+- **Duplicate application**: submit `happy.json` twice. The second gets a
+  "Possible duplicate application" task linking the first, and is held **In
+  review** instead of approving automatically.
+- **Error pages**: open <http://localhost:5173/no/such/page> (404 inside the
+  app) or `/applications/<any id>` (an application that doesn't exist). Stop
+  the API and a red banner says "Can't reach the server, retrying…"; it
+  disappears by itself when the API is back.
 - **Failure scenarios as tests**: `npx vitest run api/src/scenarios.test.ts`.

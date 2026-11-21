@@ -13,20 +13,32 @@ scenario see the README ("Failure scenarios").
 npm run dev        # API :3000, mock providers :4000, website :5173
 ```
 
-Open <http://localhost:5173>. The nav bar has **Applications**, **Review
-queue**, **Submit**, **Dead letters** and **Demo controls**; the metrics strip
-is on every page.
+Open <http://localhost:5173>. The sidebar has *Operations* (**Applications**,
+**Review queue**), *Merchant* (**Submit application**) and *Admin* (**Dead
+letters**, **Demo controls**); the operational metrics are stat cards on the
+**Applications** page.
 
-- **Start each demo clean:** **Demo controls** -> **Delete all data** (asks
-  to confirm; deletes every application) and the switches go back to normal.
+On screen, states, reasons and events are written in plain words ("In review",
+"PAN verified, GST verification failed", "Provider answered"); this guide
+also names the underlying codes (`IN_REVIEW`, `PAN_OK_GST_FAILED`,
+`VERIFICATION_RESULT`), which you can see by hovering or focusing a badge.
+Every reviewer action opens a dialog that asks for a note (at least 5
+characters) before it can be confirmed.
+
+- **Start each demo clean:** **Demo controls** -> **Delete all data** ->
+  **Delete everything** (deletes every application) and the switches go back
+  to normal.
   This matters because of duplicate detection: submitting the same sample
   twice (most demos use `happy.json`) makes the second one a *possible
   duplicate*, held for a reviewer instead of auto-approved.
-- **Submitting a sample:** **Submit** -> **Load sample** -> pick the file ->
-  **Submit application**. The browser opens the application's page, which
-  refreshes every 3 seconds.
-- **Uploading files:** on **Submit**, use the `PAN_CARD` / `GST_CERT` /
-  `BANK_PROOF` file inputs. A file replaces the JSON document of the same type.
+- **Submitting a sample:** **Submit application** -> click the sample's card
+  under *Start from a sample* (each card says what it demonstrates and shows
+  the file name) -> **Continue** -> **Continue** -> **Submit application**.
+  The browser opens the application's page, which refreshes every 3 seconds.
+- **Uploading files:** in step 2 (*Documents*) of **Submit application**,
+  drop a file on **PAN card** / **GST certificate** / **Bank proof** (or
+  click *Choose a file*). A file replaces the sample's structured document of
+  the same type.
 - Switches in **Demo controls** affect provider requests made *after* you flip
   them. Turn them off (or **Reset all**) when you are done.
 
@@ -48,9 +60,10 @@ is on every page.
 
 ### 1. A merchant submits an application and supporting documents.
 
-*Implemented by:* `POST /applications` (JSON or multipart files); the **Submit** page.
+*Implemented by:* `POST /applications` (JSON or multipart files); the **Submit application** page.
 
-*Demo:* **Submit** -> **Load sample** `happy.json` -> **Submit application**.
+*Demo:* **Submit application** -> sample **Everything in order** (`happy.json`)
+-> **Continue** -> **Continue** -> **Submit application**.
 The form fields and three structured documents (PAN card, GST certificate,
 bank proof) are sent; the application opens in `SUBMITTED`. To submit real
 files instead, see core requirement 1.
@@ -69,9 +82,9 @@ confidence and an `ok` chip. For the failing side: `missing.json` (completeness
 
 *Implemented by:* `start_verifications` job -> mock providers on :4000.
 
-*Demo:* on the `happy.json` page, **Timeline** shows four
-`VERIFICATION_REQUESTED` rows (PAN, GST, BANK, RISK) and the four
-**Verifications** cards show `PENDING`. **Demo controls** -> *Current
+*Demo:* on the `happy.json` page, the **Timeline** tab shows four "Check
+requested from provider" rows (PAN, GST, Bank account, Risk) and the four
+**Verification checks** cards show "Waiting for provider". **Demo controls** -> *Current
 configuration* shows the provider settings.
 
 ### 4. It tracks asynchronous callbacks and updates the application state.
@@ -82,7 +95,7 @@ configuration* shows the provider settings.
 arrival is a `VERIFICATION_RESULT` row with actor **provider** in the
 Timeline; when the fourth passes the status becomes `VERIFIED`
 (`ALL_CHECKS_PASSED`). To slow it down for an audience, set **Demo controls**
--> **Callback delay (ms)** to `8000` first.
+-> **Callback delay** -> Seconds `8` -> **Set** first.
 
 ### 5. It requests missing information or routes exceptions to a human reviewer.
 
@@ -117,13 +130,14 @@ is the audit trail: every transition and event with actor and time.
 
 ### Accept an application and sample documents or structured document payloads.
 
-*Demo, structured payloads:* **Submit** -> **Load sample** (any `.json`); the
-documents are in the JSON box.
+*Demo, structured payloads:* **Submit application** -> any sample card; step
+2 shows its documents as "Structured data from the sample".
 
-*Demo, files:* **Submit** -> **Load sample** `ocr-pan.json` -> in `PAN_CARD`
-choose `sample-data/pan-sharp.png` -> **Submit application**. Optionally also
-choose `gst-cert.pdf` for `GST_CERT` and `bank-proof.pdf` for `BANK_PROOF`
-(uploads replace the JSON documents). The application completes to
+*Demo, files:* **Submit application** -> sample **Upload a PAN card**
+(`ocr-pan.json`) -> **Continue** -> drop `sample-data/pan-sharp.png` on **PAN
+card** -> **Continue** -> **Submit application**. Optionally also drop
+`gst-cert.pdf` on **GST certificate** and `bank-proof.pdf` on **Bank proof**
+(uploads replace the structured documents). The application completes to
 `MERCHANT_CREATED`.
 
 ### Extract key fields and show confidence or validation status.
@@ -178,7 +192,7 @@ status, with guards); state diagram in the README.
 - `happy.json`: all four pass, risk below 70 -> approved, merchant ID issued.
 - `gst-fail.json`: GST failed -> no approval, no merchant ID, `IN_REVIEW`.
 - `high-risk.json`: all pass but risk 85 -> `IN_REVIEW` `HIGH_RISK`; only an
-  operator **Approve** (with a note) approves it.
+  operator **Approve** (dialog, with a note) approves it.
 - The approval guard re-checks all four on every approval (failure scenario 4).
 
 ---
@@ -191,8 +205,9 @@ status, with guards); state diagram in the README.
 PDF text layer (pdfjs) for PDFs, same field rules as JSON.
 
 *Demo:*
-1. **Delete all data**. **Submit** -> `ocr-pan.json` -> `PAN_CARD`:
-   `pan-sharp.png` (optionally `gst-cert.pdf`, `bank-proof.pdf`) -> submit.
+1. **Delete all data**. **Submit application** -> **Upload a PAN card** ->
+   **Continue** -> **PAN card**: `pan-sharp.png` (optionally `gst-cert.pdf`,
+   `bank-proof.pdf`) -> **Continue** -> **Submit application**.
    **Extracted fields**: PAN and name read from the image (~0.9), the rest
    from the PDFs (0.95). The first OCR downloads the English model (~10 MB),
    so do this once before the audience arrives.
@@ -210,7 +225,7 @@ PDF text layer (pdfjs) for PDFs, same field rules as JSON.
 submit `happy.json` again. The second gets a `POSSIBLE_DUPLICATE` task
 ("Same PAN, GSTIN, bank account + IFSC as application ...", with a link to the
 first) and, after its checks pass, stops in `IN_REVIEW` instead of being
-auto-approved. **Review queue** -> type a note -> **Reject** (or **Approve**).
+auto-approved. **Review queue** -> **Reject** (or **Approve**) -> note -> confirm.
 Entity matching across documents: `conflict.json` (names compared by
 similarity, the GSTIN must contain the PAN).
 
@@ -235,10 +250,11 @@ process, so after the 30s timeout the API re-requests them
   `LOW_CONFIDENCE` (note: "BANK_PROOF.ifsc (invalid_format, confidence 0.5)").
 - **High risk:** submit `high-risk.json` -> checks pass, risk 85 ->
   `IN_REVIEW` `HIGH_RISK`.
-- **Review queue**: both listed; type a note (5+ characters, buttons stay
-  disabled until then) -> **Approve** / **Reject** / **Request info** /
-  **Retry verification**. The decision and note appear in the Timeline with
-  actor **operator**.
+- **Review queue**: both listed as cards; click **Approve** / **Reject** /
+  **Request info** / **Retry verification** -> a dialog asks for a note (the
+  confirm button stays disabled under 5 characters, with a live count) ->
+  confirm. The decision and note appear in the Timeline with actor
+  **Reviewer**.
 
 ### Add retry policies, dead-letter handling and audit history.
 
@@ -248,7 +264,7 @@ process, so after the 30s timeout the API re-requests them
    retry time (backoff 1s, 2s, 4s, 8s); after the 5th attempt (about 17s) a
    `JOB_DEAD` row and a `JOB_DEAD` review task.
 3. **Dead letters**: the `start_verifications` job, 5/5 attempts, its error.
-4. Turn **Provider outage** off. In **Dead letters**, type a note -> **Requeue**.
+4. Turn **Provider outage** off. In **Dead letters**, **Requeue** -> note -> **Requeue**.
    The job runs again and the application completes to `MERCHANT_CREATED`;
    the `JOB_DEAD` task is resolved and `JOB_REQUEUED` (actor operator) is in
    the Timeline.
@@ -261,10 +277,11 @@ scenario 3 / the **Drop callback** switch), merchant ID creation 3 times
 
 ### Show operational metrics such as time in state and exception rate.
 
-*Demo:* the metrics strip on every page: **Applications** (total),
-**Exception rate** (share of applications that ever needed a human or the
-merchant), and average time spent in each state; the **Applications** list
-shows each application's time in its current state. Run a few of the demos
+*Demo:* the stat cards on the **Applications** page: **Applications**
+(total), **Exception rate** (share of applications that ever needed a human
+or the merchant), **Need attention now**, **Avg time verifying**,
+*Applications by status* and *Average time in state*; the table below shows
+each application's time in its current state (sortable). Run a few of the demos
 above and watch the numbers change.
 
 ---
@@ -276,15 +293,15 @@ above and watch the numbers change.
 *Demo:* submit `gst-fail.json` (its GSTIN ends in `Z9`, which the mock GST
 provider rejects). Within about 2s: PAN card green, GST red
 (`GSTIN_INACTIVE`), status `IN_REVIEW`, task `PAN_OK_GST_FAILED` whose note
-lists every check. **Review queue** -> note -> **Reject** (or **Request info**).
+lists every check. **Review queue** -> **Reject** (or **Request info**) -> note -> confirm.
 Alternative: **Demo controls** -> **Fail GST** on, then any sample.
 
 ### 2. The same callback arrives multiple times.
 
 *Demo:* **Demo controls** -> **Duplicate callback** on, submit `happy.json`.
 Every provider sends each callback twice with the same `event_id`. Each
-Verifications card shows a purple **duplicate ignored ×1** marker; the
-Timeline has exactly four `VERIFICATION_RESULT` rows, not eight, and the
+verification card shows a blue **Duplicate ignored ×1** marker; the
+Timeline has exactly four "Provider answered" rows, not eight, and the
 application completes normally. Turn the switch off afterwards.
 
 ### 3. A callback arrives after the request timed out.
@@ -306,15 +323,18 @@ application completes normally. Turn the switch off afterwards.
 *Demo (about 30 seconds):*
 1. Submit `high-risk.json`; it passes every check and waits in `IN_REVIEW`
    (`HIGH_RISK`), i.e. verified but not yet approved.
-2. **Demo controls** -> **Callback delay (ms)** `15000`, press Tab.
-3. On the application page, **Change bank details (merchant)** -> account
-   `60200111122223` -> **Change bank details**. Header: bank version 2; the
-   old BANK result is superseded and a new BANK check is pending.
-4. In the `HIGH_RISK` task: note -> **Approve** -> red 409 *"Cannot approve:
-   BANK is pending for bank version 2. All of PAN, GST, BANK, RISK must pass
-   first."* The task stays open.
-5. When the BANK card turns green for version 2 (up to 15s), **Approve**
-   again -> `APPROVED` -> `MERCHANT_CREATED`. Set the delay back to `1500`.
+2. **Demo controls** -> **Callback delay** -> Seconds `15` -> **Set**.
+3. On the application page, **Bank details** tab -> New account number
+   `60200111122223` -> **Change bank details**. Version 2; the old bank
+   check is marked "(replaced)" and a new one is waiting for the provider.
+4. **Overview** tab -> in the "High risk score" task **Approve** -> note ->
+   **Approve**: the dialog shows **"Can't approve yet"** (*the bank account
+   check for the new bank details is still pending; all four checks must
+   pass*; hover **details** for the API's 409 text). **Cancel**; the task
+   stays open.
+5. When the Bank account card turns green for version 2 (up to 15 s),
+   **Approve** again -> `APPROVED` -> `MERCHANT_CREATED`. **Demo controls**
+   -> **Reset all** restores the 1.5 s delay.
 
 (On an application that is still `VERIFIED` the same change sends it back
 through `IN_REVIEW` -> `VERIFYING` automatically and it is re-approved once
@@ -326,8 +346,8 @@ the new account passes; happy applications approve within a second, so the
 *Demo:* **Demo controls** -> **Fail merchant creation** on, submit
 `happy.json`. It reaches `APPROVED`; then two `JOB_FAILED` rows (retry after
 1s, 2s) and, on the 3rd failure, `MERCHANT_CREATION_FAILED` with a review task
-(about 5 seconds). Turn the switch off -> **Review queue** -> note -> **Retry
-merchant creation** -> `APPROVED` -> `MERCHANT_CREATED` with a merchant ID.
+(about 5 seconds). Turn the switch off -> **Review queue** (or the
+application's **Retry merchant creation** button) -> note -> confirm -> `APPROVED` -> `MERCHANT_CREATED` with a merchant ID.
 Only one merchant ID is ever issued per application.
 
 ### 6. A document is blurred or conflicts with the application form.
@@ -338,8 +358,8 @@ Only one merchant ID is ever issued per application.
 no provider is called. **Review queue** -> **Request info** (merchant fixes it)
 or **Reject**.
 
-*Demo, blurred:* **Submit** -> `ocr-pan.json` -> `PAN_CARD`:
-`pan-blurry.png` -> `IN_REVIEW` `BLURRY_DOCUMENT` ("blur score 1.68 <
+*Demo, blurred:* **Submit application** -> **Upload a PAN card** -> **Continue**
+-> **PAN card**: `pan-blurry.png` -> **Continue** -> **Submit application** -> `IN_REVIEW` `BLURRY_DOCUMENT` ("blur score 1.68 <
 threshold 30"); no OCR, no provider calls. With `pan-sharp.png` instead it
 passes (delete all data between the two, or the second is also a possible
 duplicate).
@@ -355,7 +375,7 @@ duplicate).
    ignored) -> `VERIFIED` -> `APPROVED` -> `MERCHANT_CREATED` with a merchant
    ID; walk the Timeline. Turn **Duplicate callback** off.
 3. Exception path: submit `gst-fail.json` -> `IN_REVIEW` `PAN_OK_GST_FAILED`
-   -> **Review queue** -> note -> **Reject**.
+   -> **Review queue** -> **Reject** -> note -> **Reject**.
 
 Click-by-click with curl fallbacks: [DEMO.md](DEMO.md). Unattended:
 `npm run demo` (stop `npm run dev` first: if it is running the demo reuses it

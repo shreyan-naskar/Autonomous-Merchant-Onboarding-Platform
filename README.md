@@ -11,7 +11,7 @@ masked everywhere.
 
 - **API** (`api/`, Express 5, SQLite via Drizzle, port 3000): intake, extraction (JSON, OCR, PDF text), state machine, background job worker, webhook, review, metrics.
 - **Mock providers** (`mock-providers/`, port 4000): PAN, GST, bank and risk services with configurable failure modes ("chaos").
-- **Web** (`web/`, React 19 + Vite + Tailwind, port 5173): operator dashboard, review queue, merchant submit form, dead-letter view and demo controls.
+- **Web** (`web/`, React 19 + Vite + Tailwind v4, port 5173): operator console with a sidebar (Applications, Review queue, Submit application, Dead letters, Demo controls), global search, plain-language statuses and reasons, confirm dialogs for every reviewer action, 404 / error pages and an offline banner. Design tokens and primitives live in `web/src/index.css` and `web/src/components/ui.tsx`; the codes-to-words mapping in `shared/src/labels.ts`.
 - **Shared** (`shared/`, Zod): wire schemas, the state machine table, validators and masking, used by all three.
 
 Brief: [docs/PROBLEM.md](docs/PROBLEM.md). Build plan: [docs/PLAN.md](docs/PLAN.md). Build log and decisions: [docs/PROGRESS.md](docs/PROGRESS.md). **Every requirement and scenario of the brief, with how to demo it in the website: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).** Live demo script: [docs/DEMO.md](docs/DEMO.md).
@@ -25,7 +25,8 @@ cd Autonomous-Merchant-Onboarding-Platform
 npm install                               # better-sqlite3 and sharp ship prebuilt binaries; no extra dnf packages needed
 cp .env.example .env                      # optional: every value is also a built-in default
 
-npm test                                  # 424 tests (the real-OCR one is skipped until the model is cached)
+npm test                                  # 577 tests (the real-OCR one is skipped until the model is cached)
+npm run build                             # api + mock-providers (tsc) and web (tsc + vite build)
 npm run demo                              # starts API + mock providers on a fresh DB and runs the scripted demo
 npm run dev                               # API :3000, mock providers :4000, web :5173 -> open http://localhost:5173
 ```
@@ -273,7 +274,7 @@ All settings are optional (see [.env.example](.env.example)). The root `.env` is
 - **Lost callbacks are not redelivered.** The mock never retries a failed delivery. If the API is down, that result is lost, and the API times out and asks again.
 - **Review reasons follow callback arrival order.** If GST's failure arrives before PAN's pass, the reason reads `PAN_PENDING_GST_FAILED`. The task note always lists every check.
 - **In-memory demo state.** The merchant-service failure flag and mock chaos settings reset on restart.
-- **UI checked by build, not by browser tests.** The UI has no automated browser tests. It is typechecked and built, and the API calls it makes are covered by tests and the demo.
+- **No browser end-to-end tests in the repo.** The web app has component tests (Vitest + Testing Library: 404s, error boundary, dialogs, label coverage). The DEMO.md walkthrough was run in headless Chrome with a script kept outside the repo; a Playwright suite would be the next step.
 
 ## Production path
 
@@ -289,7 +290,7 @@ All settings are optional (see [.env.example](.env.example)). The root `.env` is
 ## Responsible data handling
 
 - **Masking everywhere data leaves the API.** All application responses go through one mapper. PAN, GSTIN (it embeds the PAN), account numbers and the same keys inside document payloads and audit details are reduced to their last 4 characters. Uploaded files are shown by name only, never by server path.
-- **Logs**: pino redacts sensitive keys up to 5 levels deep, and a log hook scrubs PAN- and account-shaped text from messages and error stacks. Request logs record method, path, status and duration, never bodies.
+- **Logs**: pino redacts sensitive keys up to 5 levels deep, and a log hook scrubs PAN- and account-shaped text from messages and error stacks. Request logs record method, path, status and duration, never bodies; the path is redacted too (a PAN typed into a URL is masked), as is the path echoed in 404 responses.
 - **Verified by tests and the demo.** [api/src/security.test.ts](api/src/security.test.ts) runs full flows at debug level (including a PAN typed into an operator note) and asserts no raw PAN, GSTIN or account number appears in logs or any response. That test was confirmed to fail when masking is removed. `npm run demo` repeats the check on the real service's log.
 - **Operator accountability.** Every operator action (review decisions, dismissals, dead-letter requeues) requires a note. The note is redacted and stored on the task and in the audit row with actor `operator`. The audit log is append-only in the code, and status changes only through `transition()`.
 - **Minimal provider data.** Each provider receives only what its check needs. Raw provider responses are not exposed through the API.
@@ -325,6 +326,7 @@ Other deviations:
 - `jobs.status = 'failed'` is unused: failed attempts go back to `queued` until they become `dead`. There is no reaper for jobs stuck in `running`.
 - Root `vitest` also runs a `web` project (no tests; it passes with none). Web ESLint is broken by an upstream `@typescript-eslint` / TypeScript 6 incompatibility, so `tsc -b` is the web check.
 - Phase 7: `BLURRY_DOCUMENT` comes after the missing-info check. The OCR and PDF parsers cover all three document types, not just the PAN card. Scanned PDFs are not OCR'd. Open duplicate tasks hold auto-approval, which the plan did not specify. New resolution `DISMISS` closes informational tasks (any state except `IN_REVIEW`). Tesseract downloads its model on first use; offline, image extract jobs retry and then dead-letter (requeueable).
+- UI polish pass: the operator console was rebuilt on a small design system (no API behaviour, state machine or masking changes). Small API-side changes: URL paths are redacted in logs and in the 404 message; a root `npm run build`. The web app treats a malformed application ID as a 404 without calling the API.
 - Phase 8: dead-letter requeue requires a note, like every other operator action. `POST /admin/reset-data` (demo mode only) lets `npm run demo` reset running services. A shared end-to-end test harness lives in `api/src/e2e.ts`.
 - After v1.0 (real documents): OCR field confidence is the confidence of the value's own words (a real card's page mean was 0.37 while its PAN read at 0.90); labels are found behind bilingual junk ("नाम / Name"); names drop titles and OCR noise; PDF text is rebuilt row by row from positions with pdfjs-dist (which pdf-parse wraps; pdf-parse cannot give positions, and two-column statements came out with labels far from their values); an IFSC printed with a letter O in 5th place is read as 0.
 - After v1.0 (demoing in the website): the "Information needed" panel shows plain-language requests with an input per missing form field and an upload per missing document (multipart `PATCH`); Demo controls gained **Provider outage** (mock answers 503: retries, then a dead letter) and **Delete all data** (`/admin/reset-data`, demo mode only); samples `low-confidence.json` and `missing-gst-cert.pdf`.
@@ -336,6 +338,7 @@ npm test                                 # all workspaces (vitest projects)
 npx vitest run api/src/scenarios.test.ts # the brief's failure scenarios
 npx vitest run api/src/security.test.ts  # status writer, no leaks, signatures, notes
 OCR_E2E=1 npm test                       # also run real Tesseract if the model is not cached yet
+npx vitest run --project web             # web component tests (jsdom)
 ```
 
 The tests use in-memory SQLite, an injected clock and a manual scheduler for callbacks: no sleeps, no network (except the optional real-OCR test). The suite was run 8 times, 5 of them in shuffled order, with no flaky results.

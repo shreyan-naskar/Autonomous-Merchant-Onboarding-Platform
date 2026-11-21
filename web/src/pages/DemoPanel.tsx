@@ -121,7 +121,8 @@ export function DemoPanel() {
       await qc.invalidateQueries()
     },
   })
-  const anyOn = modes.some((m) => m.on)
+  // Reset all also restores the default callback delay (1.5 s).
+  const anyOn = modes.some((m) => m.on) || (chaos.data !== undefined && chaos.data.delayMs !== 1500)
 
   return (
     <>

@@ -368,8 +368,9 @@ export function Tooltip({ content, children, side = 'top', className }: { conten
         role="tooltip"
         id={id}
         className={cx(
-          'pointer-events-none absolute left-1/2 z-50 w-max max-w-xs -translate-x-1/2 rounded-md bg-neutral-900 px-2 py-1 text-xs font-normal text-white opacity-0 shadow-overlay transition-opacity',
-          'group-hover/tt:opacity-100 group-focus-within/tt:opacity-100',
+          // display:none until shown, so hidden tooltips never widen the page (phones).
+          'pointer-events-none absolute left-1/2 z-50 hidden w-max max-w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 animate-fade-in rounded-md bg-neutral-900 px-2 py-1 text-xs font-normal text-white shadow-overlay',
+          'group-hover/tt:block group-focus-within/tt:block',
           side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
         )}
       >

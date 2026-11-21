@@ -826,3 +826,55 @@ calls were run via curl. Mermaid diagrams were not rendered locally.
 
 Tests: 458 passing. The website pages were typechecked and built, not
 clicked in a browser (no browser tool).
+
+### UI polish pass (2026-11-21)
+
+Visual direction "Ledger": paper-white surfaces, slate ink, one deep teal
+accent; Inter (bundled) with tabular numerals, monospace for IDs and masked
+values; status always as tone + icon + words.
+
+1. Design foundation: `@theme` tokens in `web/src/index.css` (accent,
+   success / warning / danger / info / neutral, radius, shadows, motion,
+   focus rings, reduced motion); primitives in `components/ui.tsx` (Button,
+   Input / Textarea / Select with label + hint + error, Switch, Card, Badge,
+   Alert, StatCard, Tabs, Dialog with focus trap, Tooltip, Skeleton,
+   EmptyState, CopyButton, PageHeader); toasts (`components/toast.tsx`,
+   `emitToast` for code outside React); lucide-react icons.
+2. Shell (`components/AppShell.tsx`): grouped sidebar with open-task and
+   dead-letter badges, collapsible / mobile drawer; top bar with title,
+   global search (`/`), API health dot; banners (offline, active demo
+   failure mode). Metrics as stat cards on Applications only. Breadcrumbs +
+   document.title via `PageHeader` / `lib/pageTitle.tsx`.
+3. Plain language: `shared/src/labels.ts` (states, review reasons incl. all
+   97 generated codes, events, checks, actors, resolutions);
+   `api/src/labels.test.ts` proves the API only creates listed reasons, and
+   `web/src/lib/labels.test.tsx` that each has a label. Pages rebuilt:
+   Applications (chips, needs-attention, search, sort, relative times),
+   application page (next action, stepper with exception branch, tabs,
+   status-change toast + flash), Review queue (cards, confirm dialogs with
+   required note and friendly 409), Submit (3 steps, sample cards, inline
+   validation, drag-and-drop with previews), Demo controls, Dead letters.
+4. Errors: NotFound (catch-all and missing / malformed application id),
+   ErrorBoundary, PageError (5xx full page with Retry), OfflineBanner;
+   `lib/queryClient.ts` (no 4xx retries, mutation errors toast, query
+   errors never toast); `lib/api.ts` (`ApiError.kind`, `fieldErrors`,
+   `friendlyError`). API: 404 message redacted; Supertest cases for JSON
+   404 and no PAN / account in errors. Found and fixed a real leak: the
+   request logger, error handler and webhook rejection log wrote raw URL
+   paths (a PAN in a URL reached the logs).
+5. Verify: web component tests (Vitest + jsdom + Testing Library; jsdom is
+   a root devDependency because vitest is hoisted): unknown route ->
+   NotFound, mocked 404 -> NotFound, malformed id, error boundary + Retry,
+   5xx / network PageError, label coverage, dialog keyboard behaviour,
+   field ARIA wiring, central error helpers. Root `npm run build`.
+
+Results: `npm test` 577 passed (40 files); `npm run build` and
+`npm run typecheck` clean. Browser checks (headless Chrome via
+playwright-core, scripts outside the repo, on a scratch stack: API 3100,
+mocks 4100, Vite 5174, scratch DB): every page screenshotted and reviewed at
+1366 px and 390 px (no horizontal scroll after fixing hidden tooltips that
+widened the page); offline banner appears when the API is stopped and clears
+when it is back; the whole of docs/DEMO.md (17 steps, incl. the guard 409
+dialog and the bank re-verification) passes end to end with no page or
+console errors. Not verified: screen readers, real mobile devices, contrast
+measured with a tool (tokens chosen for AA), Firefox/Safari.

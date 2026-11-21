@@ -142,7 +142,7 @@ export function VerificationCards({ app }: { app: App }) {
                   </span>
                 </Tooltip>
               ) : (
-                <Badge tone="neutral">Not started</Badge>
+                <Badge tone="neutral">{rows.length > 0 ? 'Re-checking' : 'Not started'}</Badge>
               )}
             </div>
             {current ? (
@@ -170,7 +170,9 @@ export function VerificationCards({ app }: { app: App }) {
                 <dd className="tabular text-right text-neutral-800">{current.completed_at ? time(current.completed_at) : '—'}</dd>
               </dl>
             ) : (
-              <p className="mt-3 text-xs text-neutral-500">Requested once extraction succeeds.</p>
+              <p className="mt-3 text-xs text-neutral-500">
+                {rows.length > 0 ? 'Being sent to the provider again (for example after a bank details change).' : 'Requested once extraction succeeds.'}
+              </p>
             )}
             {(late > 0 || dupes > 0 || stale > 0) && (
               <div className="mt-3 flex flex-wrap gap-1">
