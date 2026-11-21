@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { jobs } from './db/schema.js';
-import { events, openTask, sample, startE2E, type E2E } from './e2e.js';
+import { events, openTask, startE2E, type E2E } from './e2e.js';
+import { sample } from './testing.js';
 
 /* Providers answer 503: the job retries with backoff, dead-letters, and completes once requeued after the outage. */
 

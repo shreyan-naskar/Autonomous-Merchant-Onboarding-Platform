@@ -1,7 +1,7 @@
 import { ArrowLeft, LayoutList, MapPinOff } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router'
 import { Button } from '../components/ui.tsx'
-import { usePageTitle } from '../lib/pageTitle.tsx'
+import { usePageTitle } from '../lib/page-title.ts'
 
 /** Rendered inside the shell, so navigation stays usable. Also used for a resource that doesn't exist. */
 export function NotFound({ title = 'Page not found', message }: { title?: string; message?: string }) {

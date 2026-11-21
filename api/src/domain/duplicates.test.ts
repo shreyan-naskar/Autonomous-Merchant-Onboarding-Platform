@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, ReviewQueueDtoSchema, resolutionsFor } from '@app/shared';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
@@ -13,9 +10,8 @@ import { resolveReview } from '../review/resolve.js';
 import { appRow, auditOf, HAPPY_INPUT, makeEnv, T0, tasksOf, verifiedApp } from '../verification/testkit.js';
 import { submitApplication, type NewApplicationInput } from './applications.js';
 import { findDuplicates, normalizeAccount, normalizeCode } from './duplicates.js';
+import { sample } from '../testing.js';
 
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
-const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
 
 let env: ReturnType<typeof makeEnv>;
 let db: Db;

@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, ApplicationListDtoSchema } from '@app/shared';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
@@ -13,9 +12,8 @@ import { openDb, type Db } from '../db/client.js';
 import { applications, auditLog, documents, extractedFields, jobs, reviewTasks, verifications } from '../db/schema.js';
 import { transition } from '../domain/transition.js';
 import { createLogger } from '../logger.js';
+import { sample } from '../testing.js';
 
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
-const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
 const SAMPLES = ['happy.json', 'gst-fail.json', 'conflict.json', 'missing.json'];
 
 const happy = sample('happy.json');

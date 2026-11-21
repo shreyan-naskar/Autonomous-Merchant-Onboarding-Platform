@@ -10,7 +10,7 @@ export interface TransitionRow {
 }
 
 /** An exception is any application that needed a person or the merchant. */
-export const EXCEPTION_STATES: readonly ApplicationStatus[] = ['IN_REVIEW', 'NEEDS_INFO'];
+const EXCEPTION_STATES: readonly ApplicationStatus[] = ['IN_REVIEW', 'NEEDS_INFO'];
 
 /** Stays still in progress are not averaged (they count in `current`). `rows` must be in audit order per application. */
 export function computeMetrics(rows: readonly TransitionRow[], current: Partial<Record<ApplicationStatus, number>>): MetricsDto {

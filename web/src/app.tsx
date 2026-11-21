@@ -1,17 +1,17 @@
 import { Route, Routes, useLocation } from 'react-router'
-import { AppShell } from './components/AppShell.tsx'
-import { ChaosBanner } from './components/Banners.tsx'
+import { AppShell } from './components/app-shell.tsx'
+import { ChaosBanner } from './components/banners.tsx'
 import { ErrorBoundary, OfflineBanner } from './components/errors.tsx'
-import { ApplicationDetail } from './pages/ApplicationDetail.tsx'
-import { ApplicationList } from './pages/ApplicationList.tsx'
-import { DeadLetters } from './pages/DeadLetters.tsx'
-import { DemoPanel } from './pages/DemoPanel.tsx'
-import { NotFound } from './pages/NotFound.tsx'
-import { ReviewQueue } from './pages/ReviewQueue.tsx'
-import { SubmitApplication } from './pages/SubmitApplication.tsx'
+import { ApplicationDetail } from './pages/application-detail.tsx'
+import { ApplicationList } from './pages/application-list.tsx'
+import { DeadLetters } from './pages/dead-letters.tsx'
+import { DemoPanel } from './pages/demo-panel.tsx'
+import { NotFound } from './pages/not-found.tsx'
+import { ReviewQueue } from './pages/review-queue.tsx'
+import { SubmitApplication } from './pages/submit-application.tsx'
 
 /** Routes inside the shell, so navigation stays visible on 404s and crashes. */
-export function AppRoutes() {
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<ApplicationList />} />

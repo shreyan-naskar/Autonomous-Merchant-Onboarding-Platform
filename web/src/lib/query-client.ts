@@ -1,7 +1,6 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
-import { toastFor } from '../components/errors.tsx'
-import { emitToast } from '../components/toast.tsx'
-import { isApiError } from './api.ts'
+import { emitToast } from './toast.ts'
+import { friendlyError, isApiError } from './api.ts'
 
 /*
  * The one error policy: a 4xx is final (no retry); query errors never toast
@@ -14,7 +13,8 @@ export function createQueryClient() {
     mutationCache: new MutationCache({
       onError: (error, _vars, _ctx, mutation) => {
         if (mutation.meta?.toast === false) return
-        emitToast({ tone: 'error', ...toastFor(error) })
+        const f = friendlyError(error)
+        emitToast({ tone: 'error', title: f.title, message: f.message })
       },
     }),
     defaultOptions: {

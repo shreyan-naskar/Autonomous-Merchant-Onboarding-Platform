@@ -6,14 +6,14 @@ import { currentVerification } from '../verification/latest.js';
 
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-export type Guard = (tx: Tx, app: Application) => void;
+type Guard = (tx: Tx, app: Application) => void;
 
 /**
  * Every check PASSED on its latest attempt, and BANK for the current
  * bank_version: a bank change invalidates the earlier result, so an
  * application can never be approved with unverified bank details.
  */
-export const approvalGuard: Guard = (tx, app) => {
+const approvalGuard: Guard = (tx, app) => {
   const blocking: { kind: VerificationKind; status: string }[] = [];
   for (const kind of REQUIRED_CHECKS) {
     const status = currentVerification(tx, app, kind)?.status;

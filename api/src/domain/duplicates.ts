@@ -10,15 +10,15 @@ import type { Tx } from './guards.js';
  * blocks submission; approve.ts holds auto-approval while the task is open.
  */
 
-export type DuplicateKey = 'pan' | 'gst' | 'bank';
+type DuplicateKey = 'pan' | 'gst' | 'bank';
 
-export interface DuplicateMatch {
+interface DuplicateMatch {
   applicationId: string;
   status: ApplicationStatus;
   matchedOn: DuplicateKey[];
 }
 
-export const MAX_DUPLICATE_TASKS = 5;
+const MAX_DUPLICATE_TASKS = 5;
 
 export const normalizeCode = (v: string | null | undefined) => (v ? v.replace(/\s+/g, '').toUpperCase() : null);
 export const normalizeAccount = (v: string | null | undefined) => (v ? v.replace(/[^0-9]/g, '') : null);

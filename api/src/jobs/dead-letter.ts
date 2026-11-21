@@ -3,6 +3,7 @@ import { and, desc, eq, like } from 'drizzle-orm';
 import type { Db } from '../db/client.js';
 import { applications, auditLog, jobs, reviewTasks } from '../db/schema.js';
 import { ConflictError, NotFoundError } from '../errors.js';
+import { jobApplicationId } from './queue.js';
 
 /* The dead-letter queue: jobs with status `dead` (retries exhausted or no handler), listed and requeued by an operator. */
 
@@ -11,11 +12,6 @@ export type JobRow = typeof jobs.$inferSelect;
 export function listDeadJobs(db: Db, { limit = 200 }: { limit?: number } = {}): JobRow[] {
   return db.select().from(jobs).where(eq(jobs.status, 'dead')).orderBy(desc(jobs.updatedAt), desc(jobs.id)).limit(limit).all();
 }
-
-const applicationIdOf = (job: JobRow) => {
-  const id = (job.payload as Record<string, unknown> | null)?.application_id;
-  return typeof id === 'string' ? id : undefined;
-};
 
 /** Resets the retry budget, audits the operator's note and resolves the JOB_DEAD task the worker opened for this job. */
 export function requeueJob(db: Db, jobId: number, { now, note: rawNote }: { now: number; note: string }): JobRow {
@@ -33,7 +29,7 @@ export function requeueJob(db: Db, jobId: number, { now, note: rawNote }: { now:
         .returning()
         .get();
 
-      const appId = applicationIdOf(job);
+      const appId = jobApplicationId(job);
       const app = appId ? tx.select({ status: applications.status }).from(applications).where(eq(applications.id, appId)).get() : undefined;
       if (appId && app) {
         tx.insert(auditLog)

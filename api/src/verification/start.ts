@@ -16,7 +16,7 @@ export interface VerificationDeps {
   now: number;
 }
 
-export interface StartResult {
+interface StartResult {
   requested: Verification[];
   skipped: VerificationKind[];
 }

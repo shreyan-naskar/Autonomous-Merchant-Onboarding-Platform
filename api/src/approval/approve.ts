@@ -12,7 +12,7 @@ export function enqueueCreateMerchant(tx: Tx, appId: string, config: Config, now
   return enqueueJob(tx, 'create_merchant', { application_id: appId }, { now, maxAttempts: config.limits.merchantCreateMaxAttempts });
 }
 
-export type ApproveOutcome = 'approved' | 'high_risk' | 'possible_duplicate' | 'skipped';
+type ApproveOutcome = 'approved' | 'high_risk' | 'possible_duplicate' | 'skipped';
 
 /**
  * Risk is a score, not a failed check: above RISK_THRESHOLD (or missing) the

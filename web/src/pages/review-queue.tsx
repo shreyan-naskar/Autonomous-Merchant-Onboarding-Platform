@@ -3,7 +3,8 @@ import { CheckCircle2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { TaskCard } from '../components/review.tsx'
 import { PageError } from '../components/errors.tsx'
-import { EmptyState, PageHeader, Skeleton, cx } from '../components/ui.tsx'
+import { EmptyState, PageHeader, Skeleton } from '../components/ui.tsx'
+import { cx } from '../lib/tone.ts'
 import { useOpenTasks } from '../lib/queries.ts'
 
 type Filter = 'all' | 'danger' | 'warning' | 'info'
@@ -12,7 +13,7 @@ type Filter = 'all' | 'danger' | 'warning' | 'info'
 export function ReviewQueue() {
   const { data, error, isPending, refetch } = useOpenTasks()
   const [filter, setFilter] = useState<Filter>('all')
-  const items = data?.items ?? []
+  const items = useMemo(() => data?.items ?? [], [data])
   const shown = useMemo(() => (filter === 'all' ? items : items.filter((t) => describeReason(t.reason).severity === filter)), [items, filter])
   const count = (f: Filter) => (f === 'all' ? items.length : items.filter((t) => describeReason(t.reason).severity === f).length)
 

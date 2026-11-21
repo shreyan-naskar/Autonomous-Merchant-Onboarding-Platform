@@ -1,22 +1,16 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { allReviewReasons, VERIFICATION_KINDS, VERIFICATION_STATUSES, type VerificationKind, type VerificationStatus } from '@app/shared';
 import { describe, expect, it } from 'vitest';
 import { failureReason } from './verification/evaluate.js';
+import { sourceFiles } from './testing.js';
 
 /* The API can only create reasons on allReviewReasons(); web/src/lib/labels.test.tsx proves each has a label. */
 
 const SRC = fileURLToPath(new URL('.', import.meta.url));
 const known = new Set(allReviewReasons());
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) return sourceFiles(p);
-    return p.endsWith('.ts') && !p.endsWith('.test.ts') ? [p] : [];
-  });
-}
 
 describe('review task reasons created by the API are all known to the UI', () => {
   it('every verification-result reason evaluate() can produce (all state combinations)', () => {

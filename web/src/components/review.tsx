@@ -13,11 +13,11 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { api, fieldErrors, isApiError } from '../lib/api.ts'
 import { relativeTime } from '../lib/format.ts'
-import { ReasonBadge, StatusBadge } from '../lib/labels.tsx'
-import { useToast } from './toast.tsx'
+import { ReasonBadge, StatusBadge } from './status-badge.tsx'
+import { useToast } from '../lib/toast.ts'
 import { Button, Dialog, ErrorAlert, Textarea, type ButtonProps } from './ui.tsx'
 
-export interface TaskLike {
+interface TaskLike {
   id: number
   reason: string
   status: 'OPEN' | 'RESOLVED'
@@ -56,7 +56,7 @@ const DONE: Record<ReviewResolution, string> = {
 }
 
 /** A 409 (guard or wrong state) is shown inline and the dialog stays open, so the reviewer keeps their note. */
-export function ReviewDialog({
+function ReviewDialog({
   open,
   onClose,
   applicationId,

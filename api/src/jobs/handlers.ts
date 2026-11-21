@@ -20,7 +20,7 @@ function applicationId(payload: Record<string, unknown>): string {
 
 const KindsSchema = z.array(VerificationKindSchema).min(1).optional();
 
-export interface JobHandlerDeps {
+interface JobHandlerDeps {
   providers: ProviderClient;
   /** Share the API's instance so the demo failure flag also applies to the worker. */
   merchantService?: MerchantService;

@@ -1,24 +1,13 @@
 import { CheckCircle2, Info, X, XCircle } from 'lucide-react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { cx } from './ui.tsx'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { cx } from '../lib/tone.ts'
+import { ToastContext, externalToastListeners, type ToastInput } from '../lib/toast.ts'
 
-export interface ToastInput {
-  tone?: 'success' | 'error' | 'info'
-  title: string
-  message?: string
-}
 interface ToastItem extends Required<Pick<ToastInput, 'tone' | 'title'>> {
   id: number
   message?: string
 }
 
-const ToastContext = createContext<{ push: (t: ToastInput) => void } | null>(null)
-
-/** For code outside React: the query client's global error handler. */
-const external = new Set<(t: ToastInput) => void>()
-export function emitToast(t: ToastInput) {
-  for (const l of external) l(t)
-}
 
 const STYLE = {
   success: { icon: CheckCircle2, ring: 'ring-success-200', icn: 'text-success-700' },
@@ -41,9 +30,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   )
   const value = useMemo(() => ({ push }), [push])
   useEffect(() => {
-    external.add(push)
+    externalToastListeners.add(push)
     return () => {
-      external.delete(push)
+      externalToastListeners.delete(push)
     }
   }, [push])
   return (
@@ -72,9 +61,4 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       </div>
     </ToastContext.Provider>
   )
-}
-
-/** A no-op outside a provider (isolated tests). */
-export function useToast() {
-  return useContext(ToastContext) ?? { push: () => {} }
 }

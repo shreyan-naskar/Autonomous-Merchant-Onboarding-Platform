@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, type ApplicationDetailDto, type ChaosConfig } from '@app/shared';
 import { createManualScheduler, createMockApp, type ManualScheduler, type MockApp } from 'mock-providers';
 import request from 'supertest';
@@ -16,6 +13,7 @@ import { createJobHandlers } from '../jobs/handlers.js';
 import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
 import { createHttpProviderClient } from '../providers/client.js';
+import { sample } from '../testing.js';
 
 /*
  * Verification over real HTTP: API and mock providers in-process on random
@@ -24,8 +22,6 @@ import { createHttpProviderClient } from '../providers/client.js';
  */
 
 const SECRET = 'flow-test-secret';
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
-const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
 const T0 = 1_700_000_000_000;
 const TIMEOUT = 30_000;
 

@@ -5,14 +5,14 @@ import type { Db } from './db/client.js';
 import type { Logger } from './logger.js';
 import { getMetrics } from './metrics/metrics.js';
 import { createSimulatedMerchantService, type SimulatedMerchantService } from './merchant/service.js';
-import { errorHandler, notFoundHandler } from './http/errorHandler.js';
+import { errorHandler, notFoundHandler } from './http/error-handler.js';
 import { adminRouter } from './http/routes/admin.js';
 import { applicationsRouter } from './http/routes/applications.js';
 import { jobsRouter } from './http/routes/jobs.js';
-import { reviewTasksRouter } from './http/routes/reviewTasks.js';
+import { reviewTasksRouter } from './http/routes/review-tasks.js';
 import { webhooksRouter } from './http/routes/webhooks.js';
 
-export interface AppDeps {
+interface AppDeps {
   config: Config;
   logger: Logger;
   db: Db;

@@ -14,10 +14,11 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router'
-import { STATUS_LABELS } from '@app/shared'
-import { useCurrentTitle } from '../lib/pageTitle.tsx'
+import { APPLICATION_ID_RE, STATUS_LABELS } from '@app/shared'
+import { useCurrentTitle } from '../lib/page-title.ts'
 import { useApplications, useDeadJobs, useHealth, useOpenTasks } from '../lib/queries.ts'
-import { Tooltip, cx } from './ui.tsx'
+import { Tooltip } from './ui.tsx'
+import { cx } from '../lib/tone.ts'
 
 interface NavItem {
   to: string
@@ -38,12 +39,14 @@ const readCollapsed = () => {
 
 export function AppShell({ children, banners }: { children: ReactNode; banners?: ReactNode }) {
   const [collapsed, setCollapsed] = useState(readCollapsed)
-  const [drawer, setDrawer] = useState(false)
   const location = useLocation()
+  // The drawer remembers the page it was opened on, so navigating closes it.
+  const [drawerPath, setDrawerPath] = useState<string | null>(null)
+  const drawer = drawerPath === location.pathname
+  const setDrawer = (open: boolean) => setDrawerPath(open ? location.pathname : null)
   const tasks = useOpenTasks()
   const dead = useDeadJobs()
 
-  useEffect(() => setDrawer(false), [location.pathname])
   useEffect(() => {
     try {
       localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
@@ -207,7 +210,6 @@ function HealthDot() {
   )
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function GlobalSearch() {
   const apps = useApplications()
@@ -250,7 +252,7 @@ function GlobalSearch() {
     } else if (e.key === 'Enter') {
       const pick = results[active]
       if (pick) go(pick.id)
-      else if (UUID_RE.test(q.trim())) go(q.trim())
+      else if (APPLICATION_ID_RE.test(q.trim())) go(q.trim())
     } else if (e.key === 'Escape') {
       setOpen(false)
       input.current?.blur()
@@ -288,7 +290,7 @@ function GlobalSearch() {
       {open && q.trim() !== '' && (
         <ul id="global-search-results" role="listbox" className="absolute right-0 z-40 mt-1 max-h-80 w-72 overflow-auto rounded-card border border-neutral-200 bg-white py-1 shadow-overlay">
           {results.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-neutral-500">{UUID_RE.test(q.trim()) ? 'Press Enter to open this ID' : 'No matching applications'}</li>
+            <li className="px-3 py-2 text-sm text-neutral-500">{APPLICATION_ID_RE.test(q.trim()) ? 'Press Enter to open this ID' : 'No matching applications'}</li>
           ) : (
             results.map((a, i) => (
               <li

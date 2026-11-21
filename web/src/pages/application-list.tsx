@@ -2,11 +2,13 @@ import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationStatus, type Appli
 import { ArrowDown, ArrowUp, ChevronsUpDown, FilePlus2, Inbox, Search, SearchX } from 'lucide-react'
 import { useMemo, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { MetricsStrip } from '../components/MetricsStrip.tsx'
+import { MetricsStrip } from '../components/metrics-strip.tsx'
 import { PageError } from '../components/errors.tsx'
-import { Button, Card, EmptyState, PageHeader, SkeletonRows, Switch, cx } from '../components/ui.tsx'
+import { Button, Card, EmptyState, PageHeader, SkeletonRows, Switch } from '../components/ui.tsx'
+import { cx } from '../lib/tone.ts'
 import { duration, relativeTime } from '../lib/format.ts'
-import { NEEDS_ATTENTION, StatusBadge } from '../lib/labels.tsx'
+import { NEEDS_ATTENTION } from '../lib/status.ts'
+import { StatusBadge } from '../components/status-badge.tsx'
 import { useApplications } from '../lib/queries.ts'
 
 type SortKey = 'submitted' | 'time_in_state'
@@ -31,7 +33,7 @@ export function ApplicationList() {
     setParams(next, { replace: true })
   }
 
-  const all = data?.items ?? []
+  const all = useMemo(() => data?.items ?? [], [data])
   const counts = useMemo(() => {
     const c: Partial<Record<ApplicationStatus, number>> = {}
     for (const a of all) c[a.status] = (c[a.status] ?? 0) + 1

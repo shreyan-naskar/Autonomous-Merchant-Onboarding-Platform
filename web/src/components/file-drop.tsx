@@ -1,6 +1,6 @@
 import { FileText, UploadCloud, X } from 'lucide-react'
-import { useEffect, useId, useState, type DragEvent } from 'react'
-import { cx } from './ui.tsx'
+import { useEffect, useId, useMemo, useState, type DragEvent } from 'react'
+import { cx } from '../lib/tone.ts'
 
 const ACCEPT = 'application/pdf,image/png,image/jpeg'
 const MAX_BYTES = 5 * 1024 * 1024
@@ -25,17 +25,8 @@ export function FileDrop({
   const id = useId()
   const [over, setOver] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!file || !file.type.startsWith('image/')) {
-      setPreview(null)
-      return
-    }
-    const url = URL.createObjectURL(file)
-    setPreview(url)
-    return () => URL.revokeObjectURL(url)
-  }, [file])
+  const preview = useMemo(() => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null), [file])
+  useEffect(() => () => (preview ? URL.revokeObjectURL(preview) : undefined), [preview])
 
   const accept = (f: File | undefined) => {
     if (!f) return

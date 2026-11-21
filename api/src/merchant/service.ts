@@ -22,7 +22,7 @@ export function generateMerchantId(pick: (n: number) => number = randomInt): str
   return `MID-${s}`;
 }
 
-export class MerchantServiceUnavailableError extends Error {
+class MerchantServiceUnavailableError extends Error {
   constructor() {
     super('Merchant ID service unavailable (simulated failure)');
     this.name = 'MerchantServiceUnavailableError';

@@ -13,15 +13,15 @@ import type { DocumentReading } from './read.js';
 
 /* Pure: form values + documents in, one row per expected field plus what is missing out. */
 
-export const REQUIRED_DOCUMENTS: readonly DocumentType[] = DOCUMENT_TYPES;
+const REQUIRED_DOCUMENTS: readonly DocumentType[] = DOCUMENT_TYPES;
 
-export const REQUIRED_FORM_FIELDS = ['pan', 'gst', 'bank_account', 'ifsc'] as const;
+const REQUIRED_FORM_FIELDS = ['pan', 'gst', 'bank_account', 'ifsc'] as const;
 export type FormField = (typeof REQUIRED_FORM_FIELDS)[number];
 
-export const STRUCTURED_CONFIDENCE = 1.0;
+const STRUCTURED_CONFIDENCE = 1.0;
 /** Below the default 0.8 threshold, so a malformed value goes to review. */
 export const FORMAT_FAIL_CONFIDENCE = 0.5;
-export const UNREADABLE_CONFIDENCE = 0;
+const UNREADABLE_CONFIDENCE = 0;
 
 type ValueKind = 'pan' | 'gstin' | 'bank_account' | 'ifsc' | 'name';
 

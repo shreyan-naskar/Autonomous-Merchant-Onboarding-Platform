@@ -2,7 +2,7 @@ import { reportReachable } from './connection.ts'
 
 /** Every failure becomes an ApiError with a `kind`; pages use kind, fieldErrors() and friendlyError(), never message strings. */
 
-export type ApiErrorKind = 'network' | 'validation' | 'not_found' | 'conflict' | 'server' | 'client'
+type ApiErrorKind = 'network' | 'validation' | 'not_found' | 'conflict' | 'server' | 'client'
 
 export class ApiError extends Error {
   readonly status: number
@@ -57,7 +57,7 @@ async function request<T>(base: string, path: string, init?: RequestInit & { jso
   if (proxyDown) throw new ApiError("Can't reach the server", 0, 'NETWORK')
 
   const text = await res.text()
-  let body: unknown = null
+  let body: unknown
   try {
     body = text ? JSON.parse(text) : null
   } catch {
@@ -100,7 +100,7 @@ const CHECK_STATE: Record<string, string> = {
   MISSING: 'not started',
 }
 
-export interface FriendlyError {
+interface FriendlyError {
   title: string
   message: string
   /** The API's own text, for a tooltip, when the friendly wording differs. */

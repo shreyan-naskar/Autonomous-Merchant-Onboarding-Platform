@@ -11,7 +11,8 @@ import {
   type ReviewQueueItemDto,
 } from '@app/shared';
 import type { ApplicationDetailRows, ApplicationListRow, ReviewQueueRow } from '../domain/queries.js';
-import type { JobRow } from '../jobs/deadLetter.js';
+import type { JobRow } from '../jobs/dead-letter.js';
+import { jobApplicationId } from '../jobs/queue.js';
 
 /*
  * The only place sensitive values are masked: every application response is
@@ -117,13 +118,13 @@ export function toReviewQueueItemDto(row: ReviewQueueRow): ReviewQueueItemDto {
 }
 
 export function toDeadJobDto(job: JobRow): DeadJobDto {
-  const appId = (job.payload as Record<string, unknown> | null)?.application_id;
+  const appId = jobApplicationId(job);
   return {
     id: job.id,
     type: job.type,
     status: job.status,
     payload: maskDeep(job.payload),
-    application_id: typeof appId === 'string' ? appId : null,
+    application_id: appId ?? null,
     attempts: job.attempts,
     max_attempts: job.maxAttempts,
     last_error: job.lastError === null ? null : redactText(job.lastError),

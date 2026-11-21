@@ -16,6 +16,9 @@ const iso = z.string();
 const masked = z.string().nullable();
 const jsonValue = z.unknown();
 
+/** Application ids are UUIDs (anything else cannot exist). */
+export const APPLICATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const ApplicationSummaryDtoSchema = z.object({
   id: z.string(),
   status: ApplicationStatusSchema,

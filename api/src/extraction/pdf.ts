@@ -7,7 +7,7 @@
 
 import type { TextItem } from 'pdfjs-dist/types/src/display/api.js';
 
-export const PDF_MAX_PAGES = 5;
+const PDF_MAX_PAGES = 5;
 
 interface Item {
   str: string;
@@ -36,7 +36,7 @@ export function itemsToRows(items: readonly Item[]): string[] {
       line += gap > Math.max(6, (row[i]!.height || 10) * 1.2) ? '\t' : gap > 1 ? ' ' : '';
       line += row[i]!.str;
     }
-    return line.replace(/[  ]+/g, ' ').trim();
+    return line.replace(/[ \u00a0]+/g, ' ').trim();
   });
 }
 

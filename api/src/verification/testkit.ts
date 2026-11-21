@@ -41,7 +41,7 @@ export const tasksOf = (db: Db, id = 'app-1') =>
 export const jobsOfType = (db: Db, type: string) => db.select().from(jobs).where(eq(jobs.type, type)).orderBy(jobs.id).all();
 
 /** Insert a completed verification row directly (test fixture). */
-export function seedVerification(
+function seedVerification(
   db: Db,
   id: string,
   kind: 'PAN' | 'GST' | 'BANK' | 'RISK',

@@ -1,13 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { OcrEngine } from './ocr.js';
 import { readUploadedDocuments, valueConfidence, type ReadableDocument } from './read.js';
 import { PDF_TEXT_CONFIDENCE } from './read.js';
 import { fakeOcr, positionedPdf, textPdf, TWO_COLUMN_BANK_PDF_ITEMS } from './testkit.js';
+import { SAMPLE_DIR } from '../testing.js';
 
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 const FILES: Record<string, Buffer> = {
   '/u/sharp.png': readFileSync(join(SAMPLE_DIR, 'pan-sharp.png')),
   '/u/blurry.png': readFileSync(join(SAMPLE_DIR, 'pan-blurry.png')),

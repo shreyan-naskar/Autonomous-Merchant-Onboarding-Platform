@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Worker } from 'tesseract.js';
 
-export interface OcrWord {
+interface OcrWord {
   text: string;
   confidence: number;
 }

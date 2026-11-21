@@ -1,9 +1,10 @@
 import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationStatus } from '@app/shared'
 import { Activity, AlertTriangle, CheckCircle2, Timer } from 'lucide-react'
-import { STATUS_ICON, toneOf } from '../lib/labels.tsx'
+import { STATUS_ICON, toneOf } from '../lib/status.ts'
 import { duration } from '../lib/format.ts'
 import { useMetrics } from '../lib/queries.ts'
-import { Skeleton, StatCard, Tooltip, TONE_SOFT, cx } from './ui.tsx'
+import { Skeleton, StatCard, Tooltip } from './ui.tsx'
+import { TONE_SOFT, cx } from '../lib/tone.ts'
 
 const TIMED: readonly ApplicationStatus[] = ['EXTRACTING', 'VERIFYING', 'IN_REVIEW', 'NEEDS_INFO', 'APPROVED']
 

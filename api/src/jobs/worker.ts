@@ -4,10 +4,11 @@ import type { Config } from '../config.js';
 import type { Db } from '../db/client.js';
 import { applications, auditLog, jobs, reviewTasks } from '../db/schema.js';
 import type { Logger } from '../logger.js';
+import { jobApplicationId } from './queue.js';
 
 export type JobRow = typeof jobs.$inferSelect;
 
-export interface JobContext {
+interface JobContext {
   db: Db;
   config: Config;
   logger: Logger;
@@ -28,7 +29,7 @@ export interface WorkerDeps {
   batchSize?: number;
 }
 
-export interface TickResult {
+interface TickResult {
   claimed: number;
   done: number;
   retried: number;
@@ -56,11 +57,6 @@ export function claimDueJobs(db: Db, now: number, limit: number): JobRow[] {
     .sort((a, b) => a.runAt - b.runAt || a.id - b.id);
 }
 
-const applicationIdOf = (job: JobRow): string | undefined => {
-  const id = (job.payload as Record<string, unknown> | null)?.application_id;
-  return typeof id === 'string' ? id : undefined;
-};
-
 /** Errors are stored and shown, so PAN / account-shaped text is masked first. */
 const errorText = (err: unknown) => redactText(err instanceof Error ? err.message : String(err)).slice(0, 500);
 
@@ -83,7 +79,7 @@ function recordFailure(deps: WorkerDeps, job: JobRow, err: unknown, now: number,
         .where(eq(jobs.id, job.id))
         .run();
 
-      const appId = applicationIdOf(job);
+      const appId = jobApplicationId(job);
       const app = appId
         ? tx.select({ status: applications.status }).from(applications).where(eq(applications.id, appId)).get()
         : undefined;
@@ -116,7 +112,7 @@ function recordFailure(deps: WorkerDeps, job: JobRow, err: unknown, now: number,
     { behavior: 'immediate' },
   );
 
-  const log = { job_id: job.id, type: job.type, attempts: job.attempts, application_id: applicationIdOf(job), error };
+  const log = { job_id: job.id, type: job.type, attempts: job.attempts, application_id: jobApplicationId(job), error };
   if (dead) logger.error(log, 'job dead-lettered');
   else logger.warn({ ...log, next_run_at: nextRunAt }, 'job failed, retry scheduled');
   return dead ? 'dead' : 'retried';
@@ -145,7 +141,7 @@ export async function runDueJobsOnce(deps: WorkerDeps, now: number): Promise<Tic
   return result;
 }
 
-export interface Worker {
+interface Worker {
   stop(): Promise<void>;
 }
 

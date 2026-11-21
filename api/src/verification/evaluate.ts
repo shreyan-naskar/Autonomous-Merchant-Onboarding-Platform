@@ -6,11 +6,11 @@ import { transition } from '../domain/transition.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { currentVerification } from './latest.js';
 
-export type CheckLabel = 'OK' | 'FAILED' | 'PENDING' | 'TIMED_OUT';
+type CheckLabel = 'OK' | 'FAILED' | 'PENDING' | 'TIMED_OUT';
 
 export type CheckStates = Record<VerificationKind, VerificationStatus | undefined>;
 
-export type VerificationDecision =
+type VerificationDecision =
   | { to: 'VERIFIED' }
   | { to: 'IN_REVIEW'; reason: string; failed: VerificationKind[] }
   | { to: null; waiting: VerificationKind[] };
@@ -38,7 +38,7 @@ export function decideVerification(states: CheckStates, order: readonly Verifica
   return { to: null, waiting: order.filter((k) => states[k] !== 'PASSED') };
 }
 
-export type EvaluateResult =
+type EvaluateResult =
   | { action: 'none'; reason: string }
   | { action: 'VERIFIED' }
   | { action: 'IN_REVIEW'; reason: string };

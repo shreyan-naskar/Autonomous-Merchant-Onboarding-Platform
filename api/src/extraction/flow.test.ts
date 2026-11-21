@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, type ApplicationDetailDto } from '@app/shared';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
@@ -14,14 +11,13 @@ import { createJobHandlers } from '../jobs/handlers.js';
 import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
 import { createFakeProviderClient } from '../providers/fake.js';
+import { sample } from '../testing.js';
 
 /*
  * Extraction outcomes per sample, over HTTP with the worker. Providers are the
  * in-memory fake (no callbacks), so VERIFYING is as far as these go.
  */
 
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
-const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
 
 const T0 = 1_700_000_000_000;
 let clock: number;

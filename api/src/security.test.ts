@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,11 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { openDb } from './db/client.js';
 import { callbackEvents } from './db/schema.js';
-import { openTask, sample, startE2E, type E2E } from './e2e.js';
+import { openTask, startE2E, type E2E } from './e2e.js';
+import { sample } from './testing.js';
 import { signBody } from './http/signature.js';
 import { createLogger } from './logger.js';
+import { sourceFiles } from './testing.js';
 
 /*
  * Security invariants, kept as tests:
@@ -23,13 +25,6 @@ import { createLogger } from './logger.js';
 
 const SRC = fileURLToPath(new URL('.', import.meta.url));
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const p = join(dir, name);
-    if (statSync(p).isDirectory()) return sourceFiles(p);
-    return p.endsWith('.ts') && !p.endsWith('.test.ts') ? [p] : [];
-  });
-}
 
 describe('1. status is only written by transition()', () => {
   it('no update(applications).set({... status ...}) outside domain/transition.ts', () => {

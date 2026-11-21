@@ -1,9 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, type ApplicationDetailDto, type ChaosConfig } from '@app/shared';
 import { createManualScheduler, createMockApp } from 'mock-providers';
 import type { DestinationStream } from 'pino';
@@ -22,10 +21,7 @@ import { createHttpProviderClient } from './providers/client.js';
 
 /* Test harness: API and mock providers on random ports, signed callbacks, the worker on a fake clock, callbacks on virtual time. */
 
-export const SAMPLE_DIR = fileURLToPath(new URL('../../sample-data/', import.meta.url));
-export const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
-export const sampleFile = (name: string) => readFileSync(join(SAMPLE_DIR, name));
-export const T0 = 1_700_000_000_000;
+const T0 = 1_700_000_000_000;
 const SECRET = 'e2e-secret';
 
 async function listen(app: { listen: (port: number) => Server }): Promise<[Server, string]> {

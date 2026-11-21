@@ -46,7 +46,7 @@ export function buildProviderRequest(kind: VerificationKind, app: Application): 
   }
 }
 
-export interface HttpProviderClientOptions {
+interface HttpProviderClientOptions {
   baseUrl: string;
   timeoutMs?: number;
   fetch?: typeof fetch;

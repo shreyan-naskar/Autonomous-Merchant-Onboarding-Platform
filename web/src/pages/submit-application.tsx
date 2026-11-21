@@ -12,9 +12,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, FileJson, FlaskConical, Send, X } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
-import { FileDrop } from '../components/FileDrop.tsx'
-import { useToast } from '../components/toast.tsx'
-import { Alert, Button, Card, ErrorAlert, Input, PageHeader, Textarea, cx } from '../components/ui.tsx'
+import { FileDrop } from '../components/file-drop.tsx'
+import { useToast } from '../lib/toast.ts'
+import { Alert, Button, Card, ErrorAlert, Input, PageHeader, Textarea } from '../components/ui.tsx'
+import { cx } from '../lib/tone.ts'
 import { api, fieldErrors } from '../lib/api.ts'
 
 const SAMPLES: Record<string, Record<string, unknown>> = Object.fromEntries(

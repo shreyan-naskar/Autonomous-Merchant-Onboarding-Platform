@@ -106,7 +106,7 @@ These come from the kickoff prompt and override or refine PLAN.md:
   random file names; DTOs show only `file_name`, never the server path.
 - Errors: `api/src/errors.ts` (`AppError`, `NotFoundError`, `BadRequestError`,
   `ConflictError`, `IllegalTransitionError`, `GuardError`). Central handler in
-  `api/src/http/errorHandler.ts`.
+  `api/src/http/error-handler.ts`.
 - Worker (Phase 3): `api/src/jobs/worker.ts`. `runDueJobsOnce(deps, now)`
   claims with one `UPDATE jobs SET status='running', attempts=attempts+1
   WHERE status='queued' AND id IN (due) RETURNING`, so `attempts` counts the
@@ -316,13 +316,13 @@ These come from the kickoff prompt and override or refine PLAN.md:
   audit `REVIEW_TASK_DISMISSED`; other reasons -> 409 `NOT_DISMISSIBLE`).
   `resolutionsFor(status, taskReason)` (shared) drives the UI buttons;
   `ReviewActions` takes `taskReason`.
-- Dead letters: `api/src/jobs/deadLetter.ts` (`listDeadJobs`, `requeueJob`),
+- Dead letters: `api/src/jobs/dead-letter.ts` (`listDeadJobs`, `requeueJob`),
   routes `api/src/http/routes/jobs.ts`: `GET /jobs?status=dead` (only
   `dead` accepted), `POST /jobs/:id/requeue` (dead -> queued, attempts 0,
   run_at now; 409 not dead, 404, 400). Audit `JOB_REQUEUED` (operator) and
   the job's JOB_DEAD task resolved `REQUEUED` (matched by the worker's note
   prefix `Job <type> #<id> failed`). `toDeadJobDto` in `http/dto.ts` masks
-  the payload. Web `/dead-letters` page (`pages/DeadLetters.tsx`); review
+  the payload. Web `/dead-letters` page (`pages/dead-letters.tsx`); review
   tasks show `TaskLinks` (related app / dead-letter link).
 - New audit events: `BLURRY_DOCUMENT`, `POSSIBLE_DUPLICATE`,
   `REVIEW_TASK_DISMISSED`, `JOB_REQUEUED`.
@@ -840,11 +840,11 @@ values; status always as tone + icon + words.
    Alert, StatCard, Tabs, Dialog with focus trap, Tooltip, Skeleton,
    EmptyState, CopyButton, PageHeader); toasts (`components/toast.tsx`,
    `emitToast` for code outside React); lucide-react icons.
-2. Shell (`components/AppShell.tsx`): grouped sidebar with open-task and
+2. Shell (`components/app-shell.tsx`): grouped sidebar with open-task and
    dead-letter badges, collapsible / mobile drawer; top bar with title,
    global search (`/`), API health dot; banners (offline, active demo
    failure mode). Metrics as stat cards on Applications only. Breadcrumbs +
-   document.title via `PageHeader` / `lib/pageTitle.tsx`.
+   document.title via `PageHeader` / `lib/page-title.tsx`.
 3. Plain language: `shared/src/labels.ts` (states, review reasons incl. all
    97 generated codes, events, checks, actors, resolutions);
    `api/src/labels.test.ts` proves the API only creates listed reasons, and
@@ -856,7 +856,7 @@ values; status always as tone + icon + words.
    validation, drag-and-drop with previews), Demo controls, Dead letters.
 4. Errors: NotFound (catch-all and missing / malformed application id),
    ErrorBoundary, PageError (5xx full page with Retry), OfflineBanner;
-   `lib/queryClient.ts` (no 4xx retries, mutation errors toast, query
+   `lib/query-client.ts` (no 4xx retries, mutation errors toast, query
    errors never toast); `lib/api.ts` (`ApiError.kind`, `fieldErrors`,
    `friendlyError`). API: 404 message redacted; Supertest cases for JSON
    404 and no PAN / account in errors. Found and fixed a real leak: the

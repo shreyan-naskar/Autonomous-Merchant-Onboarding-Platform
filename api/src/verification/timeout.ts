@@ -5,7 +5,7 @@ import { enqueueJob } from '../jobs/queue.js';
 import { backoffDelayMs } from '../jobs/worker.js';
 import type { VerificationDeps } from './start.js';
 
-export type TimeoutOutcome =
+type TimeoutOutcome =
   | 'not_pending'
   | 'retry_scheduled'
   | 'escalated'

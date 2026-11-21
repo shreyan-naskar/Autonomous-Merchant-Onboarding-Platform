@@ -1,9 +1,9 @@
 import { Home, RefreshCw, ServerCrash, TriangleAlert, WifiOff } from 'lucide-react'
-import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { friendlyError, isNetworkError, isNotFound, isServerError } from '../lib/api.ts'
+import { Component, type ReactNode } from 'react'
+import { isNetworkError, isNotFound, isServerError } from '../lib/api.ts'
 import { useServerReachable } from '../lib/connection.ts'
-import { usePageTitle } from '../lib/pageTitle.tsx'
-import { NotFound } from '../pages/NotFound.tsx'
+import { usePageTitle } from '../lib/page-title.ts'
+import { NotFound } from '../pages/not-found.tsx'
 import { Alert, Button, ErrorAlert, SkeletonRows } from './ui.tsx'
 
 /* A lost connection never replaces the page: the offline banner covers it while the last data stays visible. */
@@ -34,7 +34,7 @@ export function PageError({
   return <ErrorAlert error={error} />
 }
 
-export function ServerErrorPage({ onRetry }: { onRetry?: () => void }) {
+function ServerErrorPage({ onRetry }: { onRetry?: () => void }) {
   usePageTitle('Server error')
   return (
     <ErrorScreen
@@ -74,10 +74,6 @@ export class ErrorBoundary extends Component<{ children: ReactNode; resetKey?: s
 
   static getDerivedStateFromError(error: Error) {
     return { error }
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('UI crashed', error, info.componentStack)
   }
 
   componentDidUpdate(prev: { resetKey?: string }) {
@@ -138,9 +134,4 @@ export function OfflineBanner() {
       </span>
     </div>
   )
-}
-
-export const toastFor = (error: unknown) => {
-  const f = friendlyError(error)
-  return { title: f.title, message: f.message }
 }

@@ -1,7 +1,8 @@
 import { MERCHANT_ID_RE, type ApplicationDetailDto } from '@app/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { callbackEvents } from './db/schema.js';
-import { events, openTask, sample, sampleFile, startE2E, type E2E } from './e2e.js';
+import { events, openTask, startE2E, type E2E } from './e2e.js';
+import { sample, sampleFile } from './testing.js';
 
 /* One end-to-end test per failure scenario in docs/PROBLEM.md (listed in the README). */
 

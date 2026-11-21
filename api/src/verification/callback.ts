@@ -6,7 +6,7 @@ import type { Tx } from '../domain/guards.js';
 import type { Logger } from '../logger.js';
 import { evaluate } from './evaluate.js';
 
-export interface CallbackDeps {
+interface CallbackDeps {
   db: Db;
   logger: Logger;
   now: number;
@@ -18,14 +18,14 @@ export interface CallbackDeps {
  * check, or an old bank_version after a bank change) is recorded but never
  * counts. `unknown_request` waits until start_verifications stores the id.
  */
-export type CallbackOutcome = 'applied' | 'late' | 'stale' | 'already_completed' | 'mismatch' | 'unknown_request';
+type CallbackOutcome = 'applied' | 'late' | 'stale' | 'already_completed' | 'mismatch' | 'unknown_request';
 
-export type ReceiveResult =
+type ReceiveResult =
   | { duplicate: true; eventRowId: number }
   | { duplicate: false; eventRowId: number; outcome: CallbackOutcome };
 
 /** Never throws for an unexpected callback: it becomes an outcome and stays in callback_events. */
-export function applyCallback(tx: Tx, cb: ProviderCallback, now: number): CallbackOutcome {
+function applyCallback(tx: Tx, cb: ProviderCallback, now: number): CallbackOutcome {
   const row = tx.select().from(verifications).where(eq(verifications.requestId, cb.request_id)).get();
   if (!row) return 'unknown_request';
   if (row.applicationId !== cb.application_ref || row.kind !== cb.kind) return 'mismatch';

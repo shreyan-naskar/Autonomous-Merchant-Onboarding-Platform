@@ -18,7 +18,7 @@ const OTHER_NAME = /(?:father'?s?|mother'?s?|spouse'?s?|guardian'?s?|branch|bank
 function lines(text: string): string[] {
   return text
     .split(/\r?\n/)
-    .map((l) => l.replace(/[  ]+/g, ' ').replace(/ *\t */g, '\t').trim())
+    .map((l) => l.replace(/[ \u00a0]+/g, ' ').replace(/ *\t */g, '\t').trim())
     .filter((l) => l !== '');
 }
 

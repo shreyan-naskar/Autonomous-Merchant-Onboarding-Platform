@@ -30,9 +30,10 @@ import {
 import { useState, type FormEvent } from 'react'
 import { api, fieldErrors } from '../lib/api.ts'
 import { dateTime, relativeTime, time } from '../lib/format.ts'
-import { SEVERITY_ICON, STATUS_ICON, toneOf } from '../lib/labels.tsx'
-import { useToast } from './toast.tsx'
-import { Badge, Button, EmptyState, ErrorAlert, Input, TONE_SOFT, Tooltip, cx, type Tone } from './ui.tsx'
+import { SEVERITY_ICON, STATUS_ICON, toneOf } from '../lib/status.ts'
+import { useToast } from '../lib/toast.ts'
+import { Badge, Button, EmptyState, ErrorAlert, Input, Tooltip } from './ui.tsx'
+import { TONE_SOFT, cx, type Tone } from '../lib/tone.ts'
 
 type App = ApplicationDetailDto
 

@@ -1,6 +1,6 @@
 import { FlaskConical } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
-import { useChaosModes } from '../pages/DemoPanel.tsx'
+import { useChaosModes } from '../lib/chaos.ts'
 import { Button } from './ui.tsx'
 
 /** Visible on every page while any demo failure mode is on, so nobody is surprised by a "failure". */

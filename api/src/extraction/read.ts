@@ -30,7 +30,7 @@ export interface ReadableDocument {
   path: string | null;
 }
 
-export interface ReadDeps {
+interface ReadDeps {
   ocr: OcrEngine;
   blurThreshold: number;
   readFile?: (path: string) => Promise<Buffer>;

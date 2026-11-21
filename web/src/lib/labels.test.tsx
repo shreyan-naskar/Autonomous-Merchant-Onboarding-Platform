@@ -10,7 +10,8 @@ import {
 } from '@app/shared'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { ReasonBadge, StatusBadge, STATUS_ICON } from './labels.tsx'
+import { STATUS_ICON } from './status.ts'
+import { ReasonBadge, StatusBadge } from '../components/status-badge.tsx'
 
 /* Paired with api/src/labels.test.ts, which proves the API only creates reasons from allReviewReasons(). */
 describe('reason-label mapping covers every reason code in the API', () => {

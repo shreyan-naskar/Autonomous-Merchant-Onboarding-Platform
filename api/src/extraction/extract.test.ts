@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { decideAfterExtraction } from './decide.js';
 import {
@@ -10,8 +7,8 @@ import {
   type ExtractionForm,
   type ExtractionResult,
 } from './extract.js';
+import { sample } from '../testing.js';
 
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 interface Sample {
   merchant_name: string;
   pan?: string;
@@ -20,7 +17,7 @@ interface Sample {
   ifsc?: string;
   documents: { type: string; payload: Record<string, string> }[];
 }
-const sample = (name: string): Sample => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
+const loadSample = (name: string): Sample => sample(name);
 
 const OPTS = { nameThreshold: 0.85 };
 const THRESHOLD = { confidenceThreshold: 0.8 };
@@ -44,7 +41,7 @@ function run(s: Sample) {
 
 /** happy.json with one document payload edited. */
 function happyWith(type: string, patch: Record<string, string | undefined>): Sample {
-  const s = sample('happy.json');
+  const s = loadSample('happy.json');
   s.documents = s.documents.map((d) => (d.type === type ? { ...d, payload: { ...d.payload, ...patch } as Record<string, string> } : d));
   return s;
 }
@@ -52,7 +49,7 @@ const field = (r: ExtractionResult, name: string) => r.fields.find((f) => f.fiel
 
 describe('extractFields', () => {
   it('happy.json: seven fields, all ok at confidence 1.0, nothing missing', () => {
-    const { result } = run(sample('happy.json'));
+    const { result } = run(loadSample('happy.json'));
     expect(result.fields.map((f) => `${f.documentType}.${f.field}`)).toEqual([
       'PAN_CARD.pan',
       'PAN_CARD.name',
@@ -98,7 +95,7 @@ describe('extractFields', () => {
     const ok = run(happyWith('BANK_PROOF', { account_holder: 'LAKSHMI TEXTILES PRIVATE LIMITED' })).result;
     expect(field(ok, 'account_holder')).toMatchObject({ validationStatus: 'ok', similarity: 1 });
 
-    const { result } = run(sample('conflict.json'));
+    const { result } = run(loadSample('conflict.json'));
     const name = field(result, 'name');
     expect(name).toMatchObject({ documentType: 'PAN_CARD', validationStatus: 'mismatch', issue: 'name_mismatch' });
     expect(name.similarity).toBeLessThan(0.5);
@@ -110,7 +107,7 @@ describe('extractFields', () => {
   });
 
   it('reports missing documents and missing form fields', () => {
-    const s = sample('missing.json');
+    const s = loadSample('missing.json');
     delete s.ifsc;
     const { result } = run(s);
     expect(result.missingDocuments).toEqual(['GST_CERT']);
@@ -119,7 +116,7 @@ describe('extractFields', () => {
   });
 
   it('an uploaded file without a structured payload is unreadable (low confidence), not missing', () => {
-    const s = sample('happy.json');
+    const s = loadSample('happy.json');
     const docs = docsOf(s).map((d) => (d.type === 'PAN_CARD' ? { ...d, payload: null, path: '/uploads/x.pdf' } : d));
     const result = extractFields(formOf(s), docs, OPTS);
     expect(result.fields.filter((f) => f.documentType === 'PAN_CARD').map((f) => [f.validationStatus, f.issue, f.confidence])).toEqual([
@@ -129,7 +126,7 @@ describe('extractFields', () => {
   });
 
   it('skips form comparison when the form value is absent (that is reported as missing instead)', () => {
-    const s = sample('happy.json');
+    const s = loadSample('happy.json');
     delete s.pan;
     const { result } = run(s);
     expect(field(result, 'pan').validationStatus).toBe('ok');
@@ -141,7 +138,7 @@ describe('extractFields', () => {
 
 describe('decideAfterExtraction', () => {
   it('happy.json -> VERIFYING', () => {
-    expect(run(sample('happy.json')).decision).toEqual({
+    expect(run(loadSample('happy.json')).decision).toEqual({
       to: 'VERIFYING',
       reason: 'EXTRACTION_OK',
       event: 'VERIFICATION_STARTED',
@@ -153,11 +150,11 @@ describe('decideAfterExtraction', () => {
   });
 
   it('gst-fail.json is clean at extraction (GST fails later at the provider) -> VERIFYING', () => {
-    expect(run(sample('gst-fail.json')).decision.to).toBe('VERIFYING');
+    expect(run(loadSample('gst-fail.json')).decision.to).toBe('VERIFYING');
   });
 
   it('missing.json -> NEEDS_INFO listing the missing document', () => {
-    expect(run(sample('missing.json')).decision).toMatchObject({
+    expect(run(loadSample('missing.json')).decision).toMatchObject({
       to: 'NEEDS_INFO',
       reason: 'MISSING_INFO',
       event: 'INFO_REQUIRED',
@@ -173,7 +170,7 @@ describe('decideAfterExtraction', () => {
   });
 
   it('conflict.json -> IN_REVIEW DOC_CONFLICT naming the field', () => {
-    const d = run(sample('conflict.json')).decision;
+    const d = run(loadSample('conflict.json')).decision;
     expect(d).toMatchObject({ to: 'IN_REVIEW', reason: 'DOC_CONFLICT', event: 'DOC_CONFLICT', missing: [] });
     expect(d.conflicts).toEqual([{ document: 'PAN_CARD', field: 'name', issue: 'name_mismatch', similarity: expect.any(Number) }]);
   });
@@ -204,7 +201,7 @@ describe('decideAfterExtraction', () => {
 describe('documents read from an uploaded image (OCR)', () => {
   /** happy.json with the PAN card as an upload read by OCR. */
   function withPanReading(reading: ExtractionDocument['reading']) {
-    const s = sample('happy.json');
+    const s = loadSample('happy.json');
     const docs = docsOf(s).map((d) => (d.type === 'PAN_CARD' ? { ...d, payload: null, path: '/u/pan.png', reading } : d));
     const result = extractFields(formOf(s), docs, OPTS);
     return { result, decision: decideAfterExtraction(result, THRESHOLD) };
@@ -249,7 +246,7 @@ describe('documents read from an uploaded image (OCR)', () => {
   });
 
   it('a blurry image -> IN_REVIEW BLURRY_DOCUMENT, ahead of conflicts elsewhere', () => {
-    const s = sample('happy.json');
+    const s = loadSample('happy.json');
     const docs = docsOf(s).map((d) =>
       d.type === 'PAN_CARD'
         ? { ...d, payload: null, path: '/u/pan.png', reading: { source: 'ocr' as const, payload: null, confidence: 0, blurScore: 1.7, blurry: true } }
@@ -266,7 +263,7 @@ describe('documents read from an uploaded image (OCR)', () => {
   });
 
   it('missing information still wins over a blurry image (NEEDS_INFO)', () => {
-    const s = sample('happy.json');
+    const s = loadSample('happy.json');
     const docs = docsOf(s)
       .filter((d) => d.type !== 'GST_CERT')
       .map((d) =>
@@ -278,7 +275,7 @@ describe('documents read from an uploaded image (OCR)', () => {
   });
 
   it('a structured payload wins over a reading of the same document', () => {
-    const s = sample('happy.json');
+    const s = loadSample('happy.json');
     const docs = docsOf(s).map((d) =>
       d.type === 'PAN_CARD' ? { ...d, reading: { source: 'ocr' as const, payload: null, confidence: 0, blurScore: 1, blurry: true } } : d,
     );

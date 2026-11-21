@@ -34,7 +34,7 @@ import type { Logger } from '../../logger.js';
 import { resolveReview } from '../../review/resolve.js';
 import { toDetailDto, toSummaryDto } from '../dto.js';
 
-export interface ApplicationsRouterDeps {
+interface ApplicationsRouterDeps {
   db: Db;
   logger: Logger;
   config: Config;

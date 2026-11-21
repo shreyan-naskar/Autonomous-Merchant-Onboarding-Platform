@@ -1,22 +1,21 @@
-import { STATUS_LABELS, type ApplicationDetailDto, type ApplicationStatus } from '@app/shared'
+import { APPLICATION_ID_RE, STATUS_LABELS, type ApplicationDetailDto, type ApplicationStatus } from '@app/shared'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck, FileQuestion, Hourglass, RotateCcw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router'
 import { BankDetails, DocumentsList, ExtractedFields, Stepper, Timeline, VerificationCards } from '../components/application.tsx'
 import { PageError } from '../components/errors.tsx'
-import { MissingInfoPanel } from '../components/MissingInfoPanel.tsx'
+import { MissingInfoPanel } from '../components/missing-info-panel.tsx'
 import { TaskActions, TaskCard } from '../components/review.tsx'
-import { useToast } from '../components/toast.tsx'
-import { Button, Card, CopyButton, PageHeader, Skeleton, TabPanel, Tabs, cx } from '../components/ui.tsx'
+import { useToast } from '../lib/toast.ts'
+import { Button, Card, CopyButton, PageHeader, Skeleton, TabPanel, Tabs } from '../components/ui.tsx'
+import { cx } from '../lib/tone.ts'
 import { api } from '../lib/api.ts'
 import { duration, relativeTime } from '../lib/format.ts'
-import { StatusBadge } from '../lib/labels.tsx'
+import { StatusBadge } from '../components/status-badge.tsx'
 import { qk } from '../lib/queries.ts'
-import { NotFound } from './NotFound.tsx'
+import { NotFound } from './not-found.tsx'
 
-/** Application ids are UUIDs; anything else cannot exist, so it is a 404 without asking the API. */
-export const APPLICATION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const missing = (id: string) => `Application ${id} doesn't exist. It may have been deleted, or the link is wrong.`
 
 type TabId = 'overview' | 'timeline' | 'documents' | 'bank'

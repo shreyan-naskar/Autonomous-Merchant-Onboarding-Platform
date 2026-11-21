@@ -102,7 +102,7 @@ const WIRE_NAMES: Record<string, string> = { merchantName: 'merchant_name', bank
 
 const LOCKED_STATES: readonly ApplicationStatus[] = ['APPROVED', 'MERCHANT_CREATED', 'MERCHANT_CREATION_FAILED', 'REJECTED'];
 
-export interface ApplicationPatch extends Partial<NewApplicationInput> {
+interface ApplicationPatch extends Partial<NewApplicationInput> {
   /** Replaces the document of the same type. Only accepted in NEEDS_INFO. */
   documents?: NewDocumentInput[];
 }

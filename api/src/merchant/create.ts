@@ -6,7 +6,7 @@ import type { JobRow } from '../jobs/worker.js';
 import type { VerificationDeps } from '../verification/start.js';
 import type { MerchantService } from './service.js';
 
-export type CreateMerchantOutcome = 'created' | 'failed' | 'skipped';
+type CreateMerchantOutcome = 'created' | 'failed' | 'skipped';
 
 /**
  * A retry or a duplicate job never creates a second merchant ID: a stored ID is

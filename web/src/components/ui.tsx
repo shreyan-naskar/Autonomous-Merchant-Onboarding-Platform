@@ -15,28 +15,9 @@ import {
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { friendlyError } from '../lib/api.ts'
-import { usePageTitle } from '../lib/pageTitle.tsx'
+import { TONE_SOFT, cx, type Tone } from '../lib/tone.ts'
+import { usePageTitle } from '../lib/page-title.ts'
 
-export type Tone = 'accent' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'
-
-export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ')
-
-export const TONE_SOFT: Record<Tone, string> = {
-  accent: 'bg-accent-50 text-accent-800 ring-accent-200',
-  success: 'bg-success-50 text-success-800 ring-success-200',
-  warning: 'bg-warning-50 text-warning-800 ring-warning-200',
-  danger: 'bg-danger-50 text-danger-800 ring-danger-200',
-  info: 'bg-info-50 text-info-800 ring-info-200',
-  neutral: 'bg-neutral-100 text-neutral-700 ring-neutral-200',
-}
-export const TONE_DOT: Record<Tone, string> = {
-  accent: 'bg-accent-600',
-  success: 'bg-success-600',
-  warning: 'bg-warning-500',
-  danger: 'bg-danger-600',
-  info: 'bg-info-600',
-  neutral: 'bg-neutral-400',
-}
 const TONE_ICON: Record<Tone, LucideIcon> = {
   accent: Info,
   success: CheckCircle2,
@@ -82,9 +63,6 @@ export function Button({ variant = 'secondary', size = 'md', icon: Icon, loading
   )
 }
 
-export function Spinner({ label = 'Loading' }: { label?: string }) {
-  return <Loader2 role="status" aria-label={label} className="size-4 animate-spin text-neutral-400" />
-}
 
 
 interface FieldChrome {
@@ -383,7 +361,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
 }
 
 
-export interface TabDef<T extends string> {
+interface TabDef<T extends string> {
   id: T
   label: ReactNode
   count?: number
@@ -527,7 +505,7 @@ export function Dialog({
 }
 
 
-export interface Crumb {
+interface Crumb {
   label: string
   to?: string
 }

@@ -1,12 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '../config.js';
 import { blurScore, isBlurry } from './blur.js';
+import { SAMPLE_DIR } from '../testing.js';
 
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
 const SHARP = readFileSync(join(SAMPLE_DIR, 'pan-sharp.png'));
 const BLURRY = readFileSync(join(SAMPLE_DIR, 'pan-blurry.png'));
 const THRESHOLD = loadConfig({}).thresholds.blur;

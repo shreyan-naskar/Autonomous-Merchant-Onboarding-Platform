@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { ApplicationDetailDtoSchema, MERCHANT_ID_RE, type ApplicationDetailDto, type ChaosConfig } from '@app/shared';
 import { createManualScheduler, createMockApp, type ManualScheduler } from 'mock-providers';
 import request from 'supertest';
@@ -16,6 +13,7 @@ import { runDueJobsOnce, type WorkerDeps } from '../jobs/worker.js';
 import { createLogger } from '../logger.js';
 import { createSimulatedMerchantService } from '../merchant/service.js';
 import { createHttpProviderClient } from '../providers/client.js';
+import { sample } from '../testing.js';
 
 /*
  * Approval, merchant ID creation and bank changes over real HTTP. One merchant
@@ -24,8 +22,6 @@ import { createHttpProviderClient } from '../providers/client.js';
  */
 
 const SECRET = 'approval-test-secret';
-const SAMPLE_DIR = fileURLToPath(new URL('../../../sample-data/', import.meta.url));
-const sample = (name: string) => JSON.parse(readFileSync(join(SAMPLE_DIR, name), 'utf8'));
 const T0 = 1_700_000_000_000;
 const NEW_ACCT = '60200111122223';
 

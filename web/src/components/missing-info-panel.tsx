@@ -13,8 +13,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileQuestion, Send } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { api, fieldErrors } from '../lib/api.ts'
-import { FileDrop } from './FileDrop.tsx'
-import { useToast } from './toast.tsx'
+import { FileDrop } from './file-drop.tsx'
+import { useToast } from '../lib/toast.ts'
 import { Button, ErrorAlert, Input, Textarea } from './ui.tsx'
 
 type Request = { message: string; operatorNote?: string }

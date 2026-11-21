@@ -5,7 +5,7 @@ import { applications, auditLog, type Application } from '../db/schema.js';
 import { IllegalTransitionError, NotFoundError } from '../errors.js';
 import { GUARDS, type Tx } from './guards.js';
 
-export interface TransitionContext {
+interface TransitionContext {
   actor: Actor;
   event: AuditEvent;
   detail?: unknown;

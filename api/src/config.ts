@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Dev-only secret; real deployments must set HMAC_SECRET from a secrets manager. */
-export const DEV_HMAC_SECRET = 'dev-only-hmac-secret-change-me';
+const DEV_HMAC_SECRET = 'dev-only-hmac-secret-change-me';
 
 const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),

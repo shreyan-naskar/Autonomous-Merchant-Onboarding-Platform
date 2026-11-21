@@ -15,7 +15,7 @@ const FIELD_ON_DOC: Record<string, string> = {
 
 const docLower = (t: DocumentType) => DOCUMENT_LABELS[t].replace(/^Bank/, 'bank');
 
-export interface MerchantRequests {
+interface MerchantRequests {
   requests: MerchantRequest[];
   formFields: MerchantFormField[];
   documents: DocumentType[];

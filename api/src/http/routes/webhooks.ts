@@ -5,7 +5,7 @@ import type { Logger } from '../../logger.js';
 import { receiveCallback } from '../../verification/callback.js';
 import { verifySignature } from '../signature.js';
 
-export interface WebhookDeps {
+interface WebhookDeps {
   db: Db;
   logger: Logger;
   hmacSecret: string;

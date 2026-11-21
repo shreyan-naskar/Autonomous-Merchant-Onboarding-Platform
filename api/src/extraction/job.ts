@@ -11,7 +11,7 @@ import type { OcrEngine } from './ocr.js';
 import { readUploadedDocuments } from './read.js';
 import { merchantRequests } from './requests.js';
 
-export interface ExtractionDeps {
+interface ExtractionDeps {
   db: Db;
   logger: Logger;
   now: number;

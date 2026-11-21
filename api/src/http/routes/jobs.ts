@@ -2,7 +2,7 @@ import { RequeueJobRequestSchema } from '@app/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { Db } from '../../db/client.js';
-import { listDeadJobs, requeueJob } from '../../jobs/deadLetter.js';
+import { listDeadJobs, requeueJob } from '../../jobs/dead-letter.js';
 import type { Logger } from '../../logger.js';
 import { toDeadJobDto } from '../dto.js';
 

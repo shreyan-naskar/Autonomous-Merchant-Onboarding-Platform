@@ -3,9 +3,9 @@ import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router'
 import { vi } from 'vitest'
-import App from '../App.tsx'
-import { ToastProvider } from '../components/toast.tsx'
-import { PageTitleProvider } from '../lib/pageTitle.tsx'
+import App from '../app.tsx'
+import { ToastProvider } from '../components/toast-provider.tsx'
+import { PageTitleProvider } from '../components/page-title-provider.tsx'
 
 type Handler = (path: string, init?: RequestInit) => { status: number; body?: unknown } | undefined
 
@@ -36,7 +36,7 @@ function defaults(path: string): { status: number; body?: unknown } {
   return { status: 200, body: { items: [], count: 0 } }
 }
 
-export function testClient() {
+function testClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false, refetchInterval: false } } })
 }
 

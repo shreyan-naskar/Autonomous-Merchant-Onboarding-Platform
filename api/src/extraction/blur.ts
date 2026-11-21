@@ -6,7 +6,7 @@ const LAPLACIAN = [0, 1, 0, 1, -4, 1, 0, 1, 0];
 /** Output offset so negative responses survive sharp's 0-255 clamp. */
 const OFFSET = 128;
 /** Scaling first keeps the score independent of the upload's resolution. */
-export const BLUR_NORMALIZE_WIDTH = 1000;
+const BLUR_NORMALIZE_WIDTH = 1000;
 
 export async function blurScore(image: Buffer): Promise<number> {
   const { data } = await sharp(image)
