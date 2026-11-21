@@ -3,6 +3,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 import App from './App.tsx'
+import { ToastProvider } from './components/toast.tsx'
+import { PageTitleProvider } from './lib/pageTitle.tsx'
 import './index.css'
 
 // Every query polls every 3s: the UI is a window onto the API, not a source of state.
@@ -14,7 +16,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
+        <PageTitleProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </PageTitleProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

@@ -1,5 +1,120 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter";
 
-body {
-  @apply bg-slate-50 text-slate-800 antialiased;
+/*
+ * Design tokens ("Ledger"): calm paper surfaces, slate ink, one deep teal
+ * accent. Semantic tones carry status (always paired with an icon and text).
+ * Use these names in components (bg-accent-700, text-danger-700,
+ * rounded-card, ...), never raw palette colors.
+ */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Type scale (on top of Tailwind's): 11px micro labels. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* Accent: deep teal. 700 is the primary (AA on white: 5.5:1). */
+  --color-accent-50: #f0fdfa;
+  --color-accent-100: #ccfbf1;
+  --color-accent-200: #99f6e4;
+  --color-accent-300: #5eead4;
+  --color-accent-500: #14b8a6;
+  --color-accent-600: #0d9488;
+  --color-accent-700: #0f766e;
+  --color-accent-800: #115e59;
+  --color-accent-900: #134e4a;
+
+  /* Neutral: slate ink and paper. */
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+
+  /* Semantic tones. 700/800 are the text shades (AA on their 50/100 backgrounds). */
+  --color-success-50: #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-200: #a7f3d0;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success-800: #065f46;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+
+  --color-info-50: #eff6ff;
+  --color-info-100: #dbeafe;
+  --color-info-200: #bfdbfe;
+  --color-info-500: #3b82f6;
+  --color-info-600: #2563eb;
+  --color-info-700: #1d4ed8;
+  --color-info-800: #1e40af;
+
+  /* Radius and elevation. */
+  --radius-control: 0.375rem;
+  --radius-card: 0.625rem;
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-overlay: 0 10px 30px -10px rgb(15 23 42 / 0.35);
+
+  /* Motion: a soft highlight when a live value changes. */
+  --animate-flash: flash 1.6s ease-out;
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-slide-up: slide-up 200ms ease-out;
+}
+
+@keyframes flash {
+  0% { box-shadow: 0 0 0 4px rgb(20 184 166 / 0.45); }
+  100% { box-shadow: 0 0 0 0 rgb(20 184 166 / 0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@layer base {
+  html {
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    @apply bg-neutral-50 font-sans text-neutral-800 antialiased;
+  }
+  /* Visible keyboard focus everywhere (mouse clicks do not show it). */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-600;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }
