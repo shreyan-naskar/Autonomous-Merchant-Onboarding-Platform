@@ -10,9 +10,12 @@ import {
   type MerchantFormField,
 } from '@app/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { FileQuestion, Send } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { api } from '../lib/api.ts'
-import { ErrorBox, buttonClass, inputClass } from './ui.tsx'
+import { api, fieldErrors } from '../lib/api.ts'
+import { FileDrop } from './FileDrop.tsx'
+import { useToast } from './toast.tsx'
+import { Button, ErrorAlert, Input, Textarea } from './ui.tsx'
 
 type Request = { message: string; operatorNote?: string }
 
@@ -74,7 +77,6 @@ function current(app: ApplicationDetailDto, f: MerchantFormField): string | null
 }
 
 const EXAMPLE = '[{"type": "GST_CERT", "payload": {"gstin": "…", "legal_name": "…"}}]'
-const ACCEPT = 'application/pdf,image/png,image/jpeg'
 
 /**
  * Shown while the application is in NEEDS_INFO: what to supply, in plain
@@ -85,11 +87,11 @@ const ACCEPT = 'application/pdf,image/png,image/jpeg'
  */
 export function MissingInfoPanel({ app }: { app: ApplicationDetailDto }) {
   const qc = useQueryClient()
+  const toast = useToast()
   const fix = whatToFix(app)
   const [fields, setFields] = useState<Partial<Record<MerchantFormField, string>>>({})
   const [files, setFiles] = useState<Partial<Record<DocumentType, File>>>({})
   const [docs, setDocs] = useState('')
-  const [formKey, setFormKey] = useState(0) // remount file inputs after a successful send
 
   const send = useMutation({
     mutationFn: async () => {
@@ -113,10 +115,11 @@ export function MissingInfoPanel({ app }: { app: ApplicationDetailDto }) {
       setFields({})
       setFiles({})
       setDocs('')
-      setFormKey((k) => k + 1)
+      toast.push({ tone: 'success', title: 'Information sent', message: 'The documents are being read again.' })
       return qc.invalidateQueries()
     },
   })
+  const errs = fieldErrors(send.error)
 
   const otherFields = MERCHANT_FORM_FIELDS.filter((f) => !fix.formFields.includes(f))
   const otherDocs = DOCUMENT_TYPES.filter((t) => !fix.documents.includes(t))
@@ -129,75 +132,81 @@ export function MissingInfoPanel({ app }: { app: ApplicationDetailDto }) {
   const fieldInput = (f: MerchantFormField) => {
     const cur = current(app, f)
     return (
-      <label key={f} className="block text-xs text-amber-900">
-        {FORM_FIELD_LABELS[f]}
-        {cur && <span className="ml-1 font-mono text-amber-700">(now: {cur})</span>}
-        <input
-          className={`${inputClass} font-mono`}
-          value={fields[f] ?? ''}
-          autoComplete="off"
-          onChange={(e) => setFields({ ...fields, [f]: e.target.value })}
-        />
-      </label>
+      <Input
+        key={f}
+        label={FORM_FIELD_LABELS[f]}
+        hint={cur ? `Now: ${cur}` : undefined}
+        error={errs[f]}
+        className="font-mono"
+        value={fields[f] ?? ''}
+        autoComplete="off"
+        onChange={(e) => setFields({ ...fields, [f]: e.target.value })}
+      />
     )
   }
   const fileInput = (t: DocumentType) => {
     const existing = app.documents.find((d) => d.type === t)
     return (
-      <label key={t} className="block text-xs text-amber-900">
-        {DOCUMENT_LABELS[t]}
-        {existing && <span className="ml-1 text-amber-700">(now: {existing.file_name ?? 'JSON document'})</span>}
-        <input
-          type="file"
-          accept={ACCEPT}
-          className="mt-1 block w-full text-xs"
-          onChange={(e) => setFiles({ ...files, [t]: e.target.files?.[0] })}
-        />
-      </label>
+      <FileDrop
+        key={t}
+        label={DOCUMENT_LABELS[t]}
+        hint={existing ? `Now: ${existing.file_name ?? 'structured data'}` : 'PDF, PNG or JPEG, up to 5 MB'}
+        file={files[t]}
+        onChange={(file) => setFiles({ ...files, [t]: file })}
+      />
     )
   }
 
   return (
-    <form key={formKey} onSubmit={onSubmit} className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
-      <div>
-        <h2 className="text-sm font-semibold text-amber-900">Information needed from the merchant</h2>
+    <form
+      id="missing-info"
+      onSubmit={onSubmit}
+      className="scroll-mt-24 space-y-4 rounded-card border border-warning-200 bg-warning-50/60 p-4 shadow-card"
+      aria-labelledby="missing-info-title"
+    >
+      <div className="flex items-start gap-3">
+        <span className="rounded-md bg-warning-100 p-2 text-warning-800">
+          <FileQuestion aria-hidden className="size-5" />
+        </span>
+        <div>
+          <h2 id="missing-info-title" className="text-sm font-semibold text-warning-800">
+            Information needed from the merchant
+          </h2>
+          {fix.requests.length > 0 && (
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm text-warning-800">
+              {fix.requests.map((r, i) => (
+                <li key={i}>
+                  {r.message}
+                  {r.operatorNote && <span className="italic"> “{r.operatorNote}”</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
-      {fix.requests.length > 0 && (
-        <ul className="list-inside list-disc space-y-1 text-sm text-amber-900">
-          {fix.requests.map((r, i) => (
-            <li key={i}>
-              {r.message}
-              {r.operatorNote && <span className="italic"> “{r.operatorNote}”</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-
       {(fix.formFields.length > 0 || fix.documents.length > 0) && !fix.byOperator && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 rounded-card bg-white p-4 ring-1 ring-warning-200 sm:grid-cols-2">
           {fix.formFields.map(fieldInput)}
           {fix.documents.map(fileInput)}
         </div>
       )}
 
-      <details className="text-xs text-amber-900" open={fix.byOperator}>
-        <summary className="cursor-pointer select-none">{fix.byOperator ? 'Fields and documents' : 'Other changes'}</summary>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+      <details className="rounded-card bg-white p-3 text-sm ring-1 ring-neutral-200" open={fix.byOperator}>
+        <summary className="cursor-pointer font-medium text-neutral-700 select-none">{fix.byOperator ? 'Fields and documents' : 'Other changes'}</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {(fix.byOperator ? MERCHANT_FORM_FIELDS : otherFields).map(fieldInput)}
           {(fix.byOperator ? DOCUMENT_TYPES : otherDocs).map(fileInput)}
         </div>
-        <label className="mt-3 block">
-          Documents as JSON (advanced)
-          <textarea className={`${inputClass} font-mono`} rows={3} value={docs} onChange={(e) => setDocs(e.target.value)} placeholder={EXAMPLE} />
-        </label>
+        <div className="mt-3">
+          <Textarea label="Documents as JSON (advanced)" className="font-mono text-xs" rows={3} value={docs} onChange={(e) => setDocs(e.target.value)} placeholder={EXAMPLE} />
+        </div>
       </details>
 
-      <p className="text-xs text-amber-800">Files: PDF, PNG or JPEG, up to 5 MB. A new file replaces the current document of that type.</p>
-      <ErrorBox error={send.error} />
-      <button type="submit" className={buttonClass.primary} disabled={!hasInput || send.isPending}>
-        {send.isPending ? 'Sending…' : 'Send information'}
-      </button>
+      {send.error && !Object.keys(errs).length && <ErrorAlert error={send.error} />}
+      <Button type="submit" variant="primary" icon={Send} disabled={!hasInput} loading={send.isPending}>
+        Send information
+      </Button>
     </form>
   )
 }

@@ -1,45 +1,66 @@
-import type { ReviewQueueDto } from '@app/shared'
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router'
-import { ReviewActions } from '../components/ReviewActions.tsx'
-import { TaskLinks } from '../components/ReviewTaskList.tsx'
-import { StatusBadge } from '../components/StatusBadge.tsx'
-import { Card, ErrorBox, Loading, PageHeader } from '../components/ui.tsx'
-import { api } from '../lib/api.ts'
-import { dateTime } from '../lib/format.ts'
+import { describeReason } from '@app/shared'
+import { CheckCircle2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { TaskCard } from '../components/review.tsx'
+import { EmptyState, ErrorAlert, PageHeader, Skeleton, cx } from '../components/ui.tsx'
+import { useOpenTasks } from '../lib/queries.ts'
 
-/** Open review tasks across all applications, oldest first, each with the operator actions. */
+type Filter = 'all' | 'danger' | 'warning' | 'info'
+
+/** Open exceptions across all applications, oldest first, as cards with actions. */
 export function ReviewQueue() {
-  const { data, error, isPending } = useQuery({
-    queryKey: ['review-tasks'],
-    queryFn: () => api.get<ReviewQueueDto>('/review-tasks?status=OPEN'),
-  })
+  const { data, error, isPending } = useOpenTasks()
+  const [filter, setFilter] = useState<Filter>('all')
+  const items = data?.items ?? []
+  const shown = useMemo(() => (filter === 'all' ? items : items.filter((t) => describeReason(t.reason).severity === filter)), [items, filter])
+  const count = (f: Filter) => (f === 'all' ? items.length : items.filter((t) => describeReason(t.reason).severity === f).length)
+
   return (
     <>
-    <PageHeader title="Review queue" subtitle="Exceptions waiting for a person to decide." />
-    <Card title={`Review queue${data ? ` (${data.count} open)` : ''}`}>
-      <ErrorBox error={error} />
-      {isPending && <Loading />}
-      {data?.count === 0 && <p className="text-sm text-slate-500">Nothing to review.</p>}
-      <ul className="divide-y divide-slate-100">
-        {data?.items.map((t) => (
-          <li key={t.id} className="py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs text-slate-400">#{t.id}</span>
-              <span className="rounded bg-orange-100 px-2 py-0.5 font-mono text-xs font-semibold text-orange-800">{t.reason}</span>
-              <Link to={`/applications/${t.application_id}`} className="font-medium hover:underline">
-                {t.merchant_name}
-              </Link>
-              <StatusBadge status={t.application_status} />
-              <span className="text-xs text-slate-400">opened {dateTime(t.created_at)}</span>
-            </div>
-            {t.note && <p className="mt-1 text-sm text-slate-600">{t.note}</p>}
-            <TaskLinks task={t} />
-            <ReviewActions applicationId={t.application_id} taskId={t.id} taskReason={t.reason} status={t.application_status} />
-          </li>
-        ))}
-      </ul>
-    </Card>
+      <PageHeader title="Review queue" subtitle="Exceptions waiting for a person to decide, oldest first. Every decision needs a note for the audit trail." />
+      {error && !data && <ErrorAlert error={error} />}
+      {isPending ? (
+        <div className="grid gap-3 lg:grid-cols-2" role="status" aria-label="Loading review tasks">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-40" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-card border border-neutral-200 bg-white shadow-card">
+          <EmptyState icon={CheckCircle2} title="Nothing to review" text="New exceptions (failed checks, unclear or conflicting documents, high risk) appear here." />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div role="group" aria-label="Filter by severity" className="flex flex-wrap gap-1.5">
+            {(
+              [
+                ['all', 'All'],
+                ['danger', 'Failures'],
+                ['warning', 'Needs judgement'],
+                ['info', 'Informational'],
+              ] as const
+            ).map(([f, label]) => (
+              <button
+                key={f}
+                type="button"
+                aria-pressed={filter === f}
+                onClick={() => setFilter(f)}
+                className={cx(
+                  'rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset',
+                  filter === f ? 'bg-accent-700 text-white ring-accent-700' : 'bg-white text-neutral-700 ring-neutral-300 hover:bg-neutral-50',
+                )}
+              >
+                {label} <span className="tabular opacity-80">{count(f)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {shown.map((t) => (
+              <TaskCard key={t.id} task={t} applicationId={t.application_id} merchantName={t.merchant_name} status={t.application_status} />
+            ))}
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -589,23 +589,3 @@ export function PageHeader({ title, subtitle, actions, breadcrumbs, docTitle }: 
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Transitional helpers for pages not yet moved to the primitives above.
-// Token-based, so the whole app already uses the design system's colors.
-
-/** @deprecated use <Button> */
-export const buttonClass = {
-  primary: cx('inline-flex h-9 items-center gap-1.5 rounded-control px-3.5 text-sm font-medium disabled:opacity-50', BUTTON.primary),
-  secondary: cx('inline-flex h-9 items-center gap-1.5 rounded-control px-3.5 text-sm font-medium disabled:opacity-50', BUTTON.secondary),
-}
-/** @deprecated use <Input>/<Select>/<Textarea> */
-export const inputClass = cx(control(), 'min-h-9 py-1.5')
-/** @deprecated use <ErrorAlert> */
-export function ErrorBox({ error }: { error: unknown }) {
-  return <ErrorAlert error={error} />
-}
-/** @deprecated use <Skeleton>/<SkeletonRows> */
-export function Loading() {
-  return <SkeletonRows rows={3} />
-}

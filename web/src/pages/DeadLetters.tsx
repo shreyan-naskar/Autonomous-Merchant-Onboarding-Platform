@@ -1,96 +1,119 @@
-import { REVIEW_NOTE_MIN, type DeadJobDto, type DeadJobListDto } from '@app/shared'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { REVIEW_NOTE_MIN, type DeadJobDto } from '@app/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArchiveX, ArrowRight, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Card, ErrorBox, Loading, buttonClass, inputClass, PageHeader } from '../components/ui.tsx'
-import { api } from '../lib/api.ts'
-import { dateTime } from '../lib/format.ts'
+import { useToast } from '../components/toast.tsx'
+import { Badge, Button, Card, Dialog, EmptyState, ErrorAlert, PageHeader, SkeletonRows, Textarea } from '../components/ui.tsx'
+import { api, fieldErrors } from '../lib/api.ts'
+import { relativeTime } from '../lib/format.ts'
+import { useDeadJobs } from '../lib/queries.ts'
+
+const JOB_NAMES: Record<string, string> = {
+  extract: 'Read documents',
+  start_verifications: 'Send checks to providers',
+  verification_timeout: 'Check for provider timeout',
+  approve: 'Approve',
+  create_merchant: 'Create merchant ID',
+}
 
 /**
- * Dead-letter view: jobs that exhausted their retries (or had no handler).
- * Payloads arrive masked from the API. Requeue (with a required note, like
- * every operator action) resets attempts and makes the job due now; the
- * worker picks it up on its next tick.
+ * Jobs that failed every retry (or had no handler). Payloads arrive masked
+ * from the API. Requeue (with a required note) resets the attempts and makes
+ * the job due now.
  */
 export function DeadLetters() {
-  const { data, error, isPending } = useQuery({
-    queryKey: ['jobs', 'dead'],
-    queryFn: () => api.get<DeadJobListDto>('/jobs?status=dead'),
-  })
+  const { data, error, isPending } = useDeadJobs()
+  const [requeue, setRequeue] = useState<DeadJobDto | null>(null)
   return (
     <>
-    <PageHeader title="Dead letters" subtitle="Background jobs that failed every retry." />
-    <Card title={`Dead-letter jobs${data ? ` (${data.count})` : ''}`}>
-      <ErrorBox error={error} />
-      {isPending && <Loading />}
-      {data?.count === 0 && <p className="text-sm text-slate-500">No dead jobs.</p>}
-      {data && data.count > 0 && (
-        <table className="w-full text-left text-sm">
-          <thead className="text-xs uppercase text-slate-500">
-            <tr>
-              <th className="py-2">Job</th>
-              <th>Application</th>
-              <th>Payload</th>
-              <th>Attempts</th>
-              <th>Last error</th>
-              <th>Died</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+      <PageHeader title="Dead letters" subtitle="Background steps that failed every retry. Fix the cause (for example end a provider outage), then requeue." />
+      <Card padded={false}>
+        {error && !data ? (
+          <div className="p-4">
+            <ErrorAlert error={error} />
+          </div>
+        ) : isPending ? (
+          <div className="p-4">
+            <SkeletonRows rows={3} label="Loading dead letters" />
+          </div>
+        ) : !data || data.count === 0 ? (
+          <EmptyState icon={ArchiveX} title="No dead letters" text="When a background step fails every retry (try Demo controls, Provider outage) it shows up here." />
+        ) : (
+          <ul className="divide-y divide-neutral-100">
             {data.items.map((j) => (
-              <DeadJobRow key={j.id} job={j} />
+              <li key={j.id} className="flex flex-wrap items-start gap-4 p-4">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-neutral-900">{JOB_NAMES[j.type] ?? j.type}</span>
+                    <Badge tone="danger">
+                      {j.attempts}/{j.max_attempts} attempts
+                    </Badge>
+                    <span className="font-mono text-2xs text-neutral-400">
+                      #{j.id} · {j.type}
+                    </span>
+                  </div>
+                  {j.application_id && (
+                    <Link to={`/applications/${j.application_id}`} className="inline-flex items-center gap-1 text-sm text-accent-800 hover:underline">
+                      Application {j.application_id.slice(0, 8)} <ArrowRight aria-hidden className="size-3.5" />
+                    </Link>
+                  )}
+                  {j.last_error && <p className="rounded-control bg-danger-50 px-2.5 py-1.5 font-mono text-xs break-words text-danger-800">{j.last_error}</p>}
+                  <p className="text-xs text-neutral-500">gave up {relativeTime(j.updated_at)}</p>
+                </div>
+                <Button variant="primary" icon={RotateCcw} onClick={() => setRequeue(j)}>
+                  Requeue
+                </Button>
+              </li>
             ))}
-          </tbody>
-        </table>
-      )}
-    </Card>
+          </ul>
+        )}
+      </Card>
+      {requeue && <RequeueDialog job={requeue} onClose={() => setRequeue(null)} />}
     </>
   )
 }
 
-function DeadJobRow({ job }: { job: DeadJobDto }) {
+function RequeueDialog({ job, onClose }: { job: DeadJobDto; onClose: () => void }) {
   const qc = useQueryClient()
+  const toast = useToast()
   const [note, setNote] = useState('')
-  const requeue = useMutation({
+  const m = useMutation({
     mutationFn: () => api.post(`/jobs/${job.id}/requeue`, { note }),
-    onSuccess: () => qc.invalidateQueries(),
+    onSuccess: async () => {
+      toast.push({ tone: 'success', title: 'Job requeued', message: `${JOB_NAMES[job.type] ?? job.type} will run again now.` })
+      onClose()
+      await qc.invalidateQueries()
+    },
   })
-  const noteOk = note.trim().length >= REVIEW_NOTE_MIN
+  const n = note.trim().length
   return (
-    <tr className="border-t border-slate-100 align-top">
-      <td className="py-2">
-        <span className="font-mono text-xs text-slate-400">#{job.id}</span> <span className="font-medium">{job.type}</span>
-      </td>
-      <td>
-        {job.application_id ? (
-          <Link to={`/applications/${job.application_id}`} className="font-mono text-xs hover:underline">
-            {job.application_id.slice(0, 8)}
-          </Link>
-        ) : (
-          <span className="text-slate-400">—</span>
-        )}
-      </td>
-      <td>
-        <code className="block max-w-xs break-all text-xs text-slate-600">{JSON.stringify(job.payload)}</code>
-      </td>
-      <td className="tabular-nums">
-        {job.attempts}/{job.max_attempts}
-      </td>
-      <td className="max-w-xs break-words text-xs text-red-700">{job.last_error ?? '—'}</td>
-      <td className="text-xs text-slate-500">{dateTime(job.updated_at)}</td>
-      <td className="min-w-48 space-y-1 text-right">
-        <input
-          className={inputClass}
-          placeholder={`Note (min ${REVIEW_NOTE_MIN} chars)`}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-        <button type="button" className={buttonClass.primary} disabled={!noteOk || requeue.isPending} onClick={() => requeue.mutate()}>
-          Requeue
-        </button>
-        <ErrorBox error={requeue.error} />
-      </td>
-    </tr>
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Requeue: ${JOB_NAMES[job.type] ?? job.type}`}
+      description="The job runs again now with a fresh set of retries. Make sure the cause is fixed first."
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" icon={RotateCcw} disabled={n < REVIEW_NOTE_MIN} loading={m.isPending} onClick={() => m.mutate()}>
+            Requeue
+          </Button>
+        </>
+      }
+    >
+      <Textarea
+        data-autofocus
+        label="Note for the audit trail"
+        required
+        rows={3}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        error={fieldErrors(m.error).note}
+        hint={<span className="tabular" aria-live="polite">{n < REVIEW_NOTE_MIN ? `${n} / ${REVIEW_NOTE_MIN} characters minimum` : `${n} characters`}</span>}
+        placeholder="e.g. Provider outage is over"
+      />
+      {m.error && !fieldErrors(m.error).note && <ErrorAlert error={m.error} />}
+    </Dialog>
   )
 }
