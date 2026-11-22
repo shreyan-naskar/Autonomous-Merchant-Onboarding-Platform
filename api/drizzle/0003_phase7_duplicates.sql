@@ -1,0 +1,1 @@
+ALTER TABLE `review_tasks` ADD `related_application_id` text;

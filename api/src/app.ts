@@ -1,0 +1,66 @@
+import { redactText } from '@app/shared';
+import express, { type Express } from 'express';
+import type { Config } from './config.js';
+import type { Db } from './db/client.js';
+import type { Logger } from './logger.js';
+import { getMetrics } from './metrics/metrics.js';
+import { createSimulatedMerchantService, type SimulatedMerchantService } from './merchant/service.js';
+import { errorHandler, notFoundHandler } from './http/error-handler.js';
+import { adminRouter } from './http/routes/admin.js';
+import { applicationsRouter } from './http/routes/applications.js';
+import { jobsRouter } from './http/routes/jobs.js';
+import { reviewTasksRouter } from './http/routes/review-tasks.js';
+import { webhooksRouter } from './http/routes/webhooks.js';
+
+interface AppDeps {
+  config: Config;
+  logger: Logger;
+  db: Db;
+  now?: () => number;
+  /** Pass the same instance to createJobHandlers so the worker sees the demo failure flag. */
+  merchantService?: SimulatedMerchantService;
+  /** Lets tests mount extra routes before the 404 handler. */
+  mount?: (app: Express) => void;
+}
+
+export function createApp(deps: AppDeps): Express {
+  const { logger, db, config } = deps;
+  const now = deps.now ?? Date.now;
+  const merchantService = deps.merchantService ?? createSimulatedMerchantService(db);
+  const app = express();
+
+  // Never the body.
+  app.use((req, res, next) => {
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+      const ms = Number(process.hrtime.bigint() - start) / 1e6;
+      logger.debug({ method: req.method, path: redactText(req.originalUrl.split('?')[0] ?? ''), status: res.statusCode, ms }, 'request');
+    });
+    next();
+  });
+
+  // Before the JSON parser: the HMAC is computed over the raw bytes, so they must reach the route untouched.
+  app.use('/webhooks', webhooksRouter({ db, logger, hmacSecret: config.hmacSecret, now }));
+
+  app.use(express.json({ limit: '1mb' }));
+
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', service: 'api' });
+  });
+
+  app.use('/applications', applicationsRouter({ db, logger, config, uploadDir: config.uploadDir, now }));
+
+  app.get('/metrics', (_req, res) => {
+    res.json(getMetrics(db));
+  });
+
+  app.use('/review-tasks', reviewTasksRouter({ db }));
+  app.use('/jobs', jobsRouter({ db, logger, now }));
+  app.use('/admin', adminRouter({ db, demoMode: config.demoMode, merchantService, logger }));
+
+  deps.mount?.(app);
+
+  app.use(notFoundHandler);
+  app.use(errorHandler(logger));
+  return app;
+}

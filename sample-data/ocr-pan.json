@@ -1,0 +1,14 @@
+{
+  "merchant_name": "Sunrise Traders Pvt Ltd",
+  "pan": "AAFCS4321M",
+  "gst": "27AAFCS4321M1Z5",
+  "bank_account": "60200987654321",
+  "ifsc": "ICIC0004321",
+  "documents": [
+    { "type": "GST_CERT", "payload": { "gstin": "27AAFCS4321M1Z5", "legal_name": "Sunrise Traders Pvt Ltd" } },
+    {
+      "type": "BANK_PROOF",
+      "payload": { "account_number": "60200987654321", "ifsc": "ICIC0004321", "account_holder": "Sunrise Traders Pvt Ltd" }
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+@import "tailwindcss";
+@import "@fontsource-variable/noto-sans";
+@import "@fontsource/poppins/500.css";
+@import "@fontsource/poppins/600.css";
+@import "@fontsource/poppins/700.css";
+
+/*
+ * Design tokens. Navy carries structure (sidebar, top bar, primary buttons,
+ * headings); teal marks success and forward progress on light surfaces; lime
+ * is the accent on navy (active nav, counts, focus halo). Lime never carries
+ * text on white: text on a lime fill is navy, and lime text appears only on
+ * navy (contrast.test.ts checks every text pairing used in components).
+ * Neutrals are the paper, line, muted and ink tones. Use these names in
+ * components, never raw colors.
+ */
+@theme {
+  --font-sans: "Noto Sans Variable", "Noto Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Poppins", "Poppins Fallback", "Noto Sans Variable", ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (on top of Tailwind's): 11px micro labels. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* Accent: navy. 700 is #003434, 800 is navy-deep #00262c. */
+  --color-accent-50: #eef5f4;
+  --color-accent-100: #d4e6e4;
+  --color-accent-200: #a9cdca;
+  --color-accent-300: #73aaa6;
+  --color-accent-400: #3f8580;
+  --color-accent-500: #1c6560;
+  --color-accent-600: #0a4a47;
+  --color-accent-700: #003434;
+  --color-accent-800: #00262c;
+  --color-accent-900: #001a1e;
+
+  /* Highlight: lime, 400 is #d0f255. Fills and indicators on navy; never text on light surfaces. */
+  --color-highlight-50: #fafde9;
+  --color-highlight-100: #f3fbc9;
+  --color-highlight-200: #e8f7a0;
+  --color-highlight-300: #dbf478;
+  --color-highlight-400: #d0f255;
+  --color-highlight-500: #b5d93a;
+  --color-highlight-600: #8faf22;
+  --color-highlight-700: #6c851a;
+  --color-highlight-800: #536617;
+  --color-highlight-900: #435315;
+
+  /* Neutral: paper #f5f8f6, surface-soft #edf4ef, line #dbe5e0, muted #5f7172, ink #172b2d. */
+  --color-neutral-50: #f5f8f6;
+  --color-neutral-100: #edf4ef;
+  --color-neutral-200: #dbe5e0;
+  --color-neutral-300: #c2cfca;
+  --color-neutral-400: #8fa09d;
+  --color-neutral-500: #5f7172;
+  --color-neutral-600: #4a5b5c;
+  --color-neutral-700: #364648;
+  --color-neutral-800: #24363a;
+  --color-neutral-900: #172b2d;
+
+  /* Success: teal. 600 is #008d63 (fills), 700 is teal-dark #006b4d (text, focus). */
+  --color-success-50: #e9f6f1;
+  --color-success-100: #cdeee2;
+  --color-success-200: #9fdcc6;
+  --color-success-500: #1fae80;
+  --color-success-600: #008d63;
+  --color-success-700: #006b4d;
+  --color-success-800: #005740;
+
+  /* Muted semantic tones. 700/800 are the text shades (AA on their 50/100 backgrounds). */
+  --color-warning-50: #fbf6ec;
+  --color-warning-100: #f5e9cf;
+  --color-warning-200: #ebd6a5;
+  --color-warning-500: #c99a3a;
+  --color-warning-600: #a97c24;
+  --color-warning-700: #7d5a16;
+  --color-warning-800: #634713;
+
+  --color-danger-50: #fbf2f1;
+  --color-danger-100: #f6e0de;
+  --color-danger-200: #ecc3bf;
+  --color-danger-500: #c8564b;
+  --color-danger-600: #ad4237;
+  --color-danger-700: #93362e;
+  --color-danger-800: #772d27;
+
+  --color-info-50: #f1f5f9;
+  --color-info-100: #dfe8f1;
+  --color-info-200: #c3d3e3;
+  --color-info-500: #5f84a8;
+  --color-info-600: #4b6d90;
+  --color-info-700: #3c5874;
+  --color-info-800: #31485e;
+
+  /* Shape: 12px cards with hairline borders and one soft card shadow. */
+  --radius-control: 0.5rem;
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px #00262c0d, 0 16px 40px #00262c12;
+  --shadow-overlay: 0 1px 2px #00262c14, 0 20px 48px #00262c29;
+
+  /* Motion: 180ms ease-out on hover, focus and toasts only. */
+  --default-transition-duration: 180ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  --animate-fade-in: fade-in 180ms ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@layer base {
+  body {
+    @apply bg-neutral-50 font-sans text-neutral-800 antialiased;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+  /* Visible keyboard focus everywhere (mouse clicks do not show it): teal outline with a lime halo; lime on the navy chrome. */
+  :focus-visible {
+    outline: 2px solid var(--color-success-700);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--color-highlight-400);
+  }
+  .chrome :focus-visible {
+    outline-color: var(--color-highlight-400);
+    box-shadow: none;
+  }
+  /* Lucide icons at a 1.5px stroke. */
+  .lucide {
+    stroke-width: 1.5;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
