@@ -56,12 +56,20 @@ interface OcrRead {
   /** The first pass's page confidence. */
   confidence: number;
   fieldConfidence: Record<string, number>;
-  /** No rows of text in the image (a photo, noise): OCR was not run. */
+  /** No rows of text in the image (a photo, noise): OCR was not run, or found nothing on an unclear layout. */
   noText: boolean;
 }
 
-/** Below this in both directions the image has no text lines (calibrated in read.test.ts: text scores above 1.3, noise and photos below 0.6). */
+/** At or above this in either direction the image has clear text lines (calibrated in read.test.ts: text scores above 1.3, noise and photos below 0.6). */
 export const MIN_TEXT_LINES = 0.9;
+/**
+ * Below this the image is clearly not text, and OCR is not run. Between this
+ * and MIN_TEXT_LINES the layout alone cannot tell (a card whose security
+ * pattern or QR code crowds every row scores here), so OCR decides.
+ */
+export const NO_TEXT_LINES = 0.6;
+/** Words a pass must read clearly, when it finds no field, for an uncertain layout to count as text. */
+const MIN_GOOD_WORDS = 3;
 /** Smaller tilts don't bother Tesseract, and rotating costs a little sharpness. */
 const MIN_SKEW = 0.75;
 /** Tried in this order when the upright image yields none of the document's fields. */
@@ -102,9 +110,12 @@ async function ocrFields(type: DocumentType, png: Buffer, ocr: OcrEngine, have: 
   const want = expectedKeys(type);
   const out: OcrRead = { payload: {}, text: '', confidence: 0, fieldConfidence: {}, noText: false };
   const layout = await analyseLayout(png);
+  const rows = Math.max(layout.lines, layout.columns);
   // Nothing laid out in rows: OCR of noise or a photo takes long and finds nothing.
-  if (Math.max(layout.lines, layout.columns) < MIN_TEXT_LINES) return { ...out, noText: true };
-  let image = Math.abs(layout.skew) >= MIN_SKEW ? await straighten(png, layout.skew) : png;
+  if (rows < NO_TEXT_LINES) return { ...out, noText: true };
+  // Unclear rows: the measured tilt is not trustworthy either, so the image is read as it is.
+  const uncertain = rows < MIN_TEXT_LINES;
+  let image = !uncertain && Math.abs(layout.skew) >= MIN_SKEW ? await straighten(png, layout.skew) : png;
 
   const [firstPass, ...otherPasses] = OCR_PASSES;
   const run = async (img: Buffer, pass: typeof firstPass) => ocr.recognize(await pass!.prepare(img), pass!.mode);
@@ -141,6 +152,8 @@ async function ocrFields(type: DocumentType, png: Buffer, ocr: OcrEngine, have: 
       }
     }
   }
+  // An unclear layout that OCR cannot make sense of in any orientation is not a document.
+  if (uncertain && !finds(first) && goodWords(first) < MIN_GOOD_WORDS) return { ...out, noText: true };
   out.confidence = first.confidence;
   take(first);
   for (const pass of otherPasses) {

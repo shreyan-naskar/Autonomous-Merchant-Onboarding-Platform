@@ -66,9 +66,48 @@ interface Ink {
 /** A brightness step this large between neighbours is a stroke edge (after stretching contrast to 0-255). */
 const EDGE_STEP = 48;
 
+/** A block this size (at LAYOUT_WIDTH) with more than DENSE_SHARE of its pixels on an edge is not text. */
+const DENSE_BLOCK = 12;
+const DENSE_SHARE = 0.3;
+/** Above this share of dense blocks the whole image is texture or noise, and it is scored as it is. */
+const MAX_DENSE_AREA = 0.5;
+
+/**
+ * Removes blocks that are nearly solid edges: a QR code, barcode, hologram or
+ * patterned background. Text never fills a block that densely, and such a
+ * block puts the same amount of ink on every row it spans, hiding the gaps
+ * between text lines (a PAN card's QR code covers more than half its height,
+ * which made a sharp, upright card score as "no text"). Measured on cards:
+ * 6-24% of blocks are dense; on noise and texture, 70-100%.
+ */
+export function withoutDenseBlocks(img: Ink): Ink & { denseArea: number } {
+  const { width, height } = img;
+  const dense: [number, number][] = [];
+  let blocks = 0;
+  for (let by = 0; by < height; by += DENSE_BLOCK)
+    for (let bx = 0; bx < width; bx += DENSE_BLOCK) {
+      let edges = 0;
+      let pixels = 0;
+      for (let y = by; y < Math.min(by + DENSE_BLOCK, height); y++)
+        for (let x = bx; x < Math.min(bx + DENSE_BLOCK, width); x++) {
+          pixels++;
+          if (img.data[y * width + x]! > 0) edges++;
+        }
+      blocks++;
+      if (edges / pixels > DENSE_SHARE) dense.push([bx, by]);
+    }
+  const denseArea = blocks ? dense.length / blocks : 0;
+  if (dense.length === 0 || denseArea > MAX_DENSE_AREA) return { ...img, denseArea };
+  const data = Buffer.from(img.data);
+  for (const [bx, by] of dense)
+    for (let y = by; y < Math.min(by + DENSE_BLOCK, height); y++) data.fill(0, y * width + bx, y * width + Math.min(bx + DENSE_BLOCK, width));
+  return { data, width, height, denseArea };
+}
+
 /**
  * Stroke edges as 255 on black, at a small fixed width. Edges rather than dark
  * pixels, so a dark desk, a coloured card or low contrast don't count as ink.
+ * Dense blocks (QR codes, patterns) are left out: see withoutDenseBlocks.
  */
 async function ink(png: Buffer): Promise<Ink> {
   const grey = await sharp(png).resize({ width: LAYOUT_WIDTH }).greyscale().png().toBuffer();
@@ -80,7 +119,8 @@ async function ink(png: Buffer): Promise<Ink> {
       const i = y * width + x;
       if (Math.abs(g[i]! - g[i + 1]!) + Math.abs(g[i]! - g[i + width]!) >= EDGE_STEP) data[i] = 255;
     }
-  return { data, width, height };
+  const { denseArea: _, ...kept } = withoutDenseBlocks({ data, width, height });
+  return kept;
 }
 
 /** How strongly ink is organised in rows: text lines alternate with empty gaps. */
